@@ -33,9 +33,6 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Instalar dependencias y compilar Web
         run: |
           cd web
@@ -60,7 +57,7 @@ jobs:
       - name: Preparar archivo APK final
         run: |
           cp web/android/app/build/outputs/apk/debug/app-debug.apk ./MusicaParaLosOidos-v1.0.0.apk
-          ls -la MusicaParaLosOidos-v1.0.0.apk
+          ls -lh MusicaParaLosOidos-v1.0.0.apk
 
       - name: Subir artefacto APK a GitHub Actions
         uses: actions/upload-artifact@v4
@@ -74,7 +71,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         with:
           tag_name: v1.0.0
-          name: Musica para los Oidos v1.0.0 (APK Android Oficial)
+          name: Musica para los Oidos v1.0.0 (APK Android)
           draft: false
           prerelease: false
           files: |
