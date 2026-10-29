@@ -36,7 +36,16 @@ import {
   Gauge,
   ScanLine,
   Upload,
-  ImageOff
+  ImageOff,
+  Download,
+  Wifi,
+  WifiOff,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  XCircle,
+  RotateCcw,
+  Edit3
 } from 'lucide-react';
 
 import {
@@ -58,6 +67,13 @@ import {
   findMatchingLyric,
   MOCK_DEVICE_LRC_FILES
 } from './utils/lrcParser';
+import { QUALITY_OPTIONS, DOWNLOAD_STATUS } from './data/downloader';
+import {
+  extractYouTubeId,
+  getYouTubeThumbnail,
+  fetchYouTubeMetaSimulated,
+  parseYouTubeTitle
+} from './utils/youtubeUtils';
 import './App.css';
 
 export default function App() {
@@ -124,6 +140,17 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [outputProfile, setOutputProfile] = useState('studio_monitor');
 
+  // DESCARGADOR DE YOUTUBE (FASE 1)
+  const [ytUrl, setYtUrl] = useState('');
+  const [ytSearchQuery, setYtSearchQuery] = useState('');
+  const [selectedQuality, setSelectedQuality] = useState('320k');
+  const [includeLrc, setIncludeLrc] = useState(true);
+  const [downloadQueue, setDownloadQueue] = useState([]);
+  const [downloadHistory, setDownloadHistory] = useState([]);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [isAppVisible, setIsAppVisible] = useState(typeof document !== 'undefined' ? !document.hidden : true);
+  const downloadTimersRef = useRef({});
+
   const audioRef = useRef(null);
 
   // Inicializar Web Audio Engine
@@ -164,6 +191,45 @@ export default function App() {
     audioEngine.setOutputProfile(outputProfile);
   }, [outputProfile]);
 
+  // Detectar conexion a internet
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Detectar si la app esta visible (solo descargar si la app esta abierta)
+  useEffect(() => {
+    const handleVisibility = () => {
+      const visible = !document.hidden;
+      setIsAppVisible(visible);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Pausar o reanudar descargas segun visibilidad de la aplicacion
+  useEffect(() => {
+    if (!isAppVisible) {
+      setDownloadQueue(prev => prev.map(item =>
+        item.status === DOWNLOAD_STATUS.DOWNLOADING
+          ? { ...item, status: DOWNLOAD_STATUS.PAUSED }
+          : item
+      ));
+    } else {
+      setDownloadQueue(prev => prev.map(item =>
+        item.status === DOWNLOAD_STATUS.PAUSED
+          ? { ...item, status: DOWNLOAD_STATUS.DOWNLOADING }
+          : item
+      ));
+    }
+  }, [isAppVisible]);
+
   // Parsear letras sincronizadas admitiendo .lrc, .irc y .icr
   const activeParsedLyrics = useMemo(() => {
     const match = findMatchingLyric(currentSong.title, lrcFilesMap);
@@ -197,6 +263,171 @@ export default function App() {
         [newFileName]: generatedLrc
       }));
       alert(`Se creo y vinculo el archivo sincronizado: ${newFileName}`);
+    }
+  };
+
+  // FUNCIONES DEL DESCARGADOR DE YOUTUBE (FASE 1)
+  const simulateDownloadProgress = (itemId) => {
+    let progress = 0;
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+
+      progress += Math.random() * 8 + 4;
+      if (progress >= 100) {
+        progress = 100;
+        clearInterval(timer);
+        delete downloadTimersRef.current[itemId];
+
+        setDownloadQueue((prev) => {
+          const item = prev.find((i) => i.id === itemId);
+          if (item) {
+            const completedItem = {
+              ...item,
+              progress: 100,
+              status: DOWNLOAD_STATUS.COMPLETE,
+              completedAt: new Date()
+            };
+            setDownloadHistory((hist) => [completedItem, ...hist]);
+            if (item.includeLrc) {
+              const lrcFileName = `${item.meta.title}.lrc`;
+              const lrcContent = `[00:01.00] Letra sincronizada para ${item.meta.title}\n[00:10.00] Musica para los Oidos - YouTube Downloader\n[00:20.00] Artista: ${item.meta.artist}\n[00:30.00] Formato: ${item.quality}`;
+              setLrcFilesMap((prevMap) => ({ ...prevMap, [lrcFileName]: lrcContent }));
+            }
+          }
+          return prev.filter((i) => i.id !== itemId);
+        });
+      } else {
+        setDownloadQueue((prev) =>
+          prev.map((i) =>
+            i.id === itemId
+              ? { ...i, progress: Math.round(progress), status: DOWNLOAD_STATUS.DOWNLOADING }
+              : i
+          )
+        );
+      }
+    }, 220);
+    downloadTimersRef.current[itemId] = timer;
+  };
+
+  const handleAddToQueue = () => {
+    const urlToProcess = ytUrl.trim();
+    const queryToProcess = ytSearchQuery.trim();
+    if (!urlToProcess && !queryToProcess) return;
+
+    const extractedId = extractYouTubeId(urlToProcess);
+    const videoId = extractedId || `yt-${Date.now()}`;
+    const hasRealId = !!extractedId;
+
+    let meta;
+    if (hasRealId) {
+      meta = fetchYouTubeMetaSimulated(videoId);
+    } else {
+      const query = queryToProcess || urlToProcess;
+      meta = parseYouTubeTitle(query);
+      meta.videoId = videoId;
+      meta.thumbnail = null;
+    }
+
+    const newItem = {
+      id: `dl-${Date.now()}`,
+      videoId,
+      url: urlToProcess || `busqueda:${queryToProcess}`,
+      quality: selectedQuality,
+      includeLrc,
+      meta: {
+        title: meta.title,
+        artist: meta.artist,
+        album: meta.album || 'YouTube Music',
+        year: meta.year || new Date().getFullYear().toString()
+      },
+      // Solo buscar y asignar portada si hay conexion a internet
+      thumbnail: isOnline && hasRealId ? getYouTubeThumbnail(videoId) : null,
+      progress: 0,
+      status: DOWNLOAD_STATUS.QUEUED,
+      addedAt: new Date()
+    };
+
+    setDownloadQueue((prev) => [...prev, newItem]);
+    setYtUrl('');
+    setYtSearchQuery('');
+
+    // Iniciar el flujo de descarga simulado
+    setTimeout(() => {
+      setDownloadQueue((prev) =>
+        prev.map((i) => (i.id === newItem.id ? { ...i, status: DOWNLOAD_STATUS.FETCHING_META } : i))
+      );
+      setTimeout(() => {
+        simulateDownloadProgress(newItem.id);
+      }, 1100);
+    }, 600);
+  };
+
+  const handleCancelDownload = (itemId) => {
+    if (downloadTimersRef.current[itemId]) {
+      clearInterval(downloadTimersRef.current[itemId]);
+      delete downloadTimersRef.current[itemId];
+    }
+    setDownloadQueue((prev) => prev.filter((i) => i.id !== itemId));
+  };
+
+  const handleDeleteHistory = (itemId) => {
+    setDownloadHistory((prev) => prev.filter((i) => i.id !== itemId));
+  };
+
+  const handleAddHistoryToLibrary = (item) => {
+    const newSong = {
+      id: Date.now(),
+      title: item.meta.title,
+      artist: item.meta.artist,
+      album: item.meta.album || 'YouTube Music',
+      cover: item.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=120&h=120&fit=crop',
+      duration: 213,
+      audioUrl: '',
+      lyrics: []
+    };
+    setSongs((prev) => [newSong, ...prev]);
+    alert(`"${item.meta.title}" agregada a la libreria`);
+  };
+
+  const handleUpdateDownloadMeta = (itemId, field, value) => {
+    setDownloadQueue((prev) =>
+      prev.map((i) => (i.id === itemId ? { ...i, meta: { ...i.meta, [field]: value } } : i))
+    );
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case DOWNLOAD_STATUS.QUEUED:
+        return 'En cola';
+      case DOWNLOAD_STATUS.FETCHING_META:
+        return 'Obteniendo datos';
+      case DOWNLOAD_STATUS.DOWNLOADING:
+        return 'Descargando';
+      case DOWNLOAD_STATUS.COMPLETE:
+        return 'Completado';
+      case DOWNLOAD_STATUS.ERROR:
+        return 'Error';
+      case DOWNLOAD_STATUS.PAUSED:
+        return 'Pausado';
+      default:
+        return status;
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case DOWNLOAD_STATUS.COMPLETE:
+        return '#22c55e';
+      case DOWNLOAD_STATUS.ERROR:
+        return '#ef4444';
+      case DOWNLOAD_STATUS.DOWNLOADING:
+        return 'var(--phone-primary)';
+      case DOWNLOAD_STATUS.FETCHING_META:
+        return '#f59e0b';
+      case DOWNLOAD_STATUS.PAUSED:
+        return '#94a3b8';
+      default:
+        return 'var(--phone-text-muted)';
     }
   };
 
@@ -884,6 +1115,16 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
           >
             <Palette size={14} />
             <span>Ajustes</span>
+          </div>
+          <div
+            className={`stage-tool-item ${phoneScreen === 'downloader' ? 'active' : ''}`}
+            onClick={() => {
+              setPhoneScreen('downloader');
+              setIsPlayerModalOpen(false);
+            }}
+          >
+            <Download size={14} />
+            <span>Descargar</span>
           </div>
           <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
           <div
@@ -2073,6 +2314,274 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </div>
             )}
 
+            {/* PANTALLA 5: DESCARGADOR DE YOUTUBE (FASE 1) */}
+            {phoneScreen === 'downloader' && (
+              <div className="phone-viewport">
+                {/* Cabecera */}
+                <div className="phone-screen-header">
+                  <div>
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        color: 'var(--phone-text-muted)',
+                        fontWeight: 700,
+                        letterSpacing: '0.05em'
+                      }}
+                    >
+                      YOUTUBE
+                    </span>
+                    <h2 className="phone-screen-title">Descargar Musica</h2>
+                  </div>
+                  <div
+                    className={`dl-connectivity-badge ${isOnline ? 'online' : 'offline'}`}
+                  >
+                    {isOnline ? <Wifi size={11} /> : <WifiOff size={11} />}
+                    <span>{isOnline ? 'Conectado' : 'Sin Internet'}</span>
+                  </div>
+                </div>
+
+                {/* Aviso si la app no esta visible */}
+                {!isAppVisible && (
+                  <div className="dl-warning-banner">
+                    <AlertCircle size={13} />
+                    <span>Descargas pausadas - la aplicacion no esta en primer plano</span>
+                  </div>
+                )}
+
+                {/* Tarjeta de entrada URL / busqueda */}
+                <div className="dl-input-card">
+                  <div className="dl-input-label">Enlace de YouTube</div>
+                  <div className="dl-input-row">
+                    <input
+                      className="dl-text-input"
+                      type="text"
+                      placeholder="https://youtu.be/... o pegar URL"
+                      value={ytUrl}
+                      onChange={(e) => setYtUrl(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="dl-input-label" style={{ marginTop: '0.6rem' }}>
+                    Buscar por nombre
+                  </div>
+                  <div className="dl-input-row">
+                    <Search size={14} style={{ color: 'var(--phone-text-muted)', flexShrink: 0 }} />
+                    <input
+                      className="dl-text-input"
+                      type="text"
+                      placeholder="Artista - Nombre de la pista..."
+                      value={ytSearchQuery}
+                      onChange={(e) => setYtSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Selector de Calidad */}
+                  <div className="dl-input-label" style={{ marginTop: '0.6rem' }}>
+                    Calidad de audio
+                  </div>
+                  <select
+                    className="dl-select"
+                    value={selectedQuality}
+                    onChange={(e) => setSelectedQuality(e.target.value)}
+                  >
+                    {QUALITY_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Opcion de letra sincronizada (.lrc / .icr) */}
+                  <div
+                    className="dl-toggle-row"
+                    onClick={() => setIncludeLrc((v) => !v)}
+                  >
+                    <div className={`dl-toggle-pill ${includeLrc ? 'on' : 'off'}`}>
+                      <div className="dl-toggle-knob" />
+                    </div>
+                    <span className="dl-toggle-label">
+                      Incluir letra sincronizada (.lrc / .icr)
+                    </span>
+                  </div>
+
+                  <button
+                    className="dl-add-btn"
+                    onClick={handleAddToQueue}
+                    disabled={!ytUrl.trim() && !ytSearchQuery.trim()}
+                  >
+                    <Download size={15} />
+                    <span>Agregar a Cola de Descarga</span>
+                  </button>
+                </div>
+
+                {/* Cola activa */}
+                {downloadQueue.length > 0 && (
+                  <div className="dl-section">
+                    <div className="dl-section-title">
+                      <Clock size={13} />
+                      <span>Cola de Descarga ({downloadQueue.length})</span>
+                    </div>
+                    <div className="dl-items-list">
+                      {downloadQueue.map((item) => (
+                        <div key={item.id} className="dl-item-row">
+                          <div className="dl-item-thumb-wrap">
+                            {item.thumbnail ? (
+                              <img
+                                src={item.thumbnail}
+                                alt=""
+                                className="dl-item-thumb"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="dl-item-thumb-placeholder">
+                                <Music size={18} />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="dl-item-info">
+                            <input
+                              className="dl-meta-input dl-meta-title"
+                              value={item.meta.title}
+                              onChange={(e) =>
+                                handleUpdateDownloadMeta(item.id, 'title', e.target.value)
+                              }
+                            />
+                            <input
+                              className="dl-meta-input dl-meta-artist"
+                              value={item.meta.artist}
+                              onChange={(e) =>
+                                handleUpdateDownloadMeta(item.id, 'artist', e.target.value)
+                              }
+                            />
+                            <div className="dl-item-meta-row">
+                              <span className="dl-quality-badge">
+                                {QUALITY_OPTIONS.find((o) => o.id === item.quality)?.format || item.quality}
+                              </span>
+                              <span
+                                className="dl-status-badge"
+                                style={{ color: getStatusColor(item.status) }}
+                              >
+                                {getStatusLabel(item.status)}
+                              </span>
+                              {item.includeLrc && (
+                                <span className="dl-quality-badge" style={{ color: 'var(--phone-primary)' }}>
+                                  LRC
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="dl-progress-track">
+                              <div
+                                className="dl-progress-fill"
+                                style={{
+                                  width: `${item.progress}%`,
+                                  background: getStatusColor(item.status)
+                                }}
+                              />
+                            </div>
+                            <div className="dl-progress-pct">{item.progress}%</div>
+                          </div>
+
+                          <button
+                            className="dl-cancel-btn"
+                            onClick={() => handleCancelDownload(item.id)}
+                            title="Cancelar descarga"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Historial de descargas */}
+                {downloadHistory.length > 0 && (
+                  <div className="dl-section">
+                    <div className="dl-section-title">
+                      <CheckCircle size={13} />
+                      <span>Historial de Descargas ({downloadHistory.length})</span>
+                    </div>
+                    <div className="dl-items-list">
+                      {downloadHistory.map((item) => (
+                        <div key={item.id} className="dl-item-row dl-history-row">
+                          <div className="dl-item-thumb-wrap">
+                            {item.thumbnail ? (
+                              <img
+                                src={item.thumbnail}
+                                alt=""
+                                className="dl-item-thumb"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="dl-item-thumb-placeholder">
+                                <Music size={18} />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="dl-item-info">
+                            <div className="dl-meta-title-static">{item.meta.title}</div>
+                            <div className="dl-meta-artist-static">{item.meta.artist}</div>
+                            <div className="dl-item-meta-row">
+                              <span className="dl-quality-badge">
+                                {QUALITY_OPTIONS.find((o) => o.id === item.quality)?.format || item.quality}
+                              </span>
+                              <span className="dl-status-badge" style={{ color: '#22c55e' }}>
+                                Completado
+                              </span>
+                              {item.includeLrc && (
+                                <span className="dl-quality-badge" style={{ color: '#a78bfa' }}>
+                                  LRC
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="dl-history-actions">
+                            <button
+                              className="dl-lib-btn"
+                              onClick={() => handleAddHistoryToLibrary(item)}
+                              title="Agregar a libreria"
+                            >
+                              <Plus size={14} />
+                            </button>
+                            <button
+                              className="dl-cancel-btn"
+                              onClick={() => handleDeleteHistory(item.id)}
+                              title="Eliminar del historial"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {downloadQueue.length === 0 && downloadHistory.length === 0 && (
+                  <div className="dl-empty-state">
+                    <Download size={36} style={{ opacity: 0.25, marginBottom: '0.75rem' }} />
+                    <div
+                      style={{
+                        fontSize: '0.85rem',
+                        color: 'var(--phone-text-muted)',
+                        textAlign: 'center'
+                      }}
+                    >
+                      Pega un enlace de YouTube o escribe un titulo para descargar musica con portada y letra
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* MINI REPRODUCTOR PERSISTENTE */}
             <div
               className="phone-mini-player"
@@ -2424,6 +2933,16 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               >
                 <Palette size={18} />
                 <span>Ajustes</span>
+              </button>
+              <button
+                className={`phone-nav-btn ${phoneScreen === 'downloader' && !isPlayerModalOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setPhoneScreen('downloader');
+                  setIsPlayerModalOpen(false);
+                }}
+              >
+                <Download size={18} />
+                <span>Descargar</span>
               </button>
             </nav>
           </div>
