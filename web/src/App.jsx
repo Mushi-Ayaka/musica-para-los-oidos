@@ -72,7 +72,9 @@ import {
   extractYouTubeId,
   getYouTubeThumbnail,
   fetchYouTubeMetaSimulated,
-  parseYouTubeTitle
+  parseYouTubeTitle,
+  searchYouTubeSimulated,
+  TRENDING_SEARCH_RESULTS
 } from './utils/youtubeUtils';
 import './App.css';
 
@@ -143,6 +145,10 @@ export default function App() {
   // DESCARGADOR DE YOUTUBE (FASE 1)
   const [ytUrl, setYtUrl] = useState('');
   const [ytSearchQuery, setYtSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(TRENDING_SEARCH_RESULTS);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [activeResultOptionsId, setActiveResultOptionsId] = useState(null);
   const [selectedQuality, setSelectedQuality] = useState('320k');
   const [includeLrc, setIncludeLrc] = useState(true);
   const [downloadQueue, setDownloadQueue] = useState([]);
@@ -307,6 +313,55 @@ export default function App() {
       }
     }, 220);
     downloadTimersRef.current[itemId] = timer;
+  };
+
+  const handleSearchYouTube = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!ytSearchQuery.trim()) {
+      setSearchResults(TRENDING_SEARCH_RESULTS);
+      return;
+    }
+    setIsSearching(true);
+    setTimeout(() => {
+      const results = searchYouTubeSimulated(ytSearchQuery, isOnline);
+      setSearchResults(results);
+      setIsSearching(false);
+    }, 300);
+  };
+
+  const handleDownloadFromResult = (result, qualityOverride = null, lrcOverride = null) => {
+    const qualityToUse = qualityOverride || selectedQuality;
+    const lrcToUse = lrcOverride !== null ? lrcOverride : includeLrc;
+
+    const newItem = {
+      id: `dl-${Date.now()}`,
+      videoId: result.id,
+      url: `https://youtu.be/${result.id}`,
+      quality: qualityToUse,
+      includeLrc: lrcToUse,
+      meta: {
+        title: result.title,
+        artist: result.artist,
+        album: 'YouTube Music',
+        year: result.year || new Date().getFullYear().toString()
+      },
+      thumbnail: isOnline ? (result.thumbnail || getYouTubeThumbnail(result.id)) : null,
+      progress: 0,
+      status: DOWNLOAD_STATUS.QUEUED,
+      addedAt: new Date()
+    };
+
+    setDownloadQueue((prev) => [...prev, newItem]);
+    setActiveResultOptionsId(null);
+
+    setTimeout(() => {
+      setDownloadQueue((prev) =>
+        prev.map((i) => (i.id === newItem.id ? { ...i, status: DOWNLOAD_STATUS.FETCHING_META } : i))
+      );
+      setTimeout(() => {
+        simulateDownloadProgress(newItem.id);
+      }, 1000);
+    }, 500);
   };
 
   const handleAddToQueue = () => {
@@ -2348,70 +2403,219 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 )}
 
-                {/* Tarjeta de entrada URL / busqueda */}
-                <div className="dl-input-card">
-                  <div className="dl-input-label">Enlace de YouTube</div>
-                  <div className="dl-input-row">
+                {/* Buscador integrado estilo YouTube */}
+                <form className="yt-search-form" onSubmit={handleSearchYouTube}>
+                  <div className="yt-search-input-wrap">
+                    <Search size={15} className="yt-search-icon" />
                     <input
-                      className="dl-text-input"
+                      className="yt-search-input"
                       type="text"
-                      placeholder="https://youtu.be/... o pegar URL"
-                      value={ytUrl}
-                      onChange={(e) => setYtUrl(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="dl-input-label" style={{ marginTop: '0.6rem' }}>
-                    Buscar por nombre
-                  </div>
-                  <div className="dl-input-row">
-                    <Search size={14} style={{ color: 'var(--phone-text-muted)', flexShrink: 0 }} />
-                    <input
-                      className="dl-text-input"
-                      type="text"
-                      placeholder="Artista - Nombre de la pista..."
+                      placeholder="Buscar en YouTube canciones o artistas..."
                       value={ytSearchQuery}
                       onChange={(e) => setYtSearchQuery(e.target.value)}
                     />
+                    {ytSearchQuery && (
+                      <button
+                        type="button"
+                        className="yt-search-clear-btn"
+                        onClick={() => {
+                          setYtSearchQuery('');
+                          setSearchResults(TRENDING_SEARCH_RESULTS);
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
+                  <button type="submit" className="yt-search-submit-btn">
+                    <span>Buscar</span>
+                  </button>
+                </form>
 
-                  {/* Selector de Calidad */}
-                  <div className="dl-input-label" style={{ marginTop: '0.6rem' }}>
-                    Calidad de audio
-                  </div>
-                  <select
-                    className="dl-select"
-                    value={selectedQuality}
-                    onChange={(e) => setSelectedQuality(e.target.value)}
+                {/* Alternador de enlace URL directo */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0.2rem 0 0.6rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowUrlInput((v) => !v)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--phone-primary)',
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: '2px 0'
+                    }}
                   >
-                    {QUALITY_OPTIONS.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                    {showUrlInput ? 'Ocultar enlace directo URL' : 'O pegar enlace directo URL'}
+                  </button>
+                </div>
 
-                  {/* Opcion de letra sincronizada (.lrc / .icr) */}
-                  <div
-                    className="dl-toggle-row"
-                    onClick={() => setIncludeLrc((v) => !v)}
-                  >
-                    <div className={`dl-toggle-pill ${includeLrc ? 'on' : 'off'}`}>
-                      <div className="dl-toggle-knob" />
+                {showUrlInput && (
+                  <div className="dl-input-card" style={{ marginBottom: '0.75rem' }}>
+                    <div className="dl-input-label">Enlace de YouTube</div>
+                    <div className="dl-input-row">
+                      <input
+                        className="dl-text-input"
+                        type="text"
+                        placeholder="https://youtu.be/... o pegar URL"
+                        value={ytUrl}
+                        onChange={(e) => setYtUrl(e.target.value)}
+                      />
                     </div>
-                    <span className="dl-toggle-label">
-                      Incluir letra sincronizada (.lrc / .icr)
+                    <button
+                      className="dl-add-btn"
+                      onClick={handleAddToQueue}
+                      disabled={!ytUrl.trim()}
+                      style={{ marginTop: '0.4rem' }}
+                    >
+                      <Download size={14} />
+                      <span>Descargar desde URL</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Ajustes predeterminados de calidad y letra LRC */}
+                <div className="dl-input-card" style={{ padding: '0.75rem 0.85rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px', alignItems: 'center' }}>
+                    <div>
+                      <div className="dl-input-label" style={{ marginBottom: '3px' }}>Calidad predeterminada</div>
+                      <select
+                        className="dl-select"
+                        value={selectedQuality}
+                        onChange={(e) => setSelectedQuality(e.target.value)}
+                        style={{ padding: '6px 8px', fontSize: '0.75rem' }}
+                      >
+                        {QUALITY_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="dl-input-label" style={{ marginBottom: '3px' }}>Letra .lrc</div>
+                      <div
+                        className="dl-toggle-row"
+                        onClick={() => setIncludeLrc((v) => !v)}
+                        style={{ padding: '3px 0' }}
+                      >
+                        <div className={`dl-toggle-pill ${includeLrc ? 'on' : 'off'}`}>
+                          <div className="dl-toggle-knob" />
+                        </div>
+                        <span className="dl-toggle-label" style={{ fontSize: '0.7rem' }}>
+                          Sincronizar .lrc
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RESULTADOS DE BUSQUEDA EN YOUTUBE */}
+                <div className="dl-section">
+                  <div className="dl-section-title">
+                    <Music size={13} />
+                    <span>
+                      {ytSearchQuery.trim()
+                        ? `Resultados de YouTube (${searchResults.length})`
+                        : 'Sugerencias de YouTube'}
                     </span>
                   </div>
 
-                  <button
-                    className="dl-add-btn"
-                    onClick={handleAddToQueue}
-                    disabled={!ytUrl.trim() && !ytSearchQuery.trim()}
-                  >
-                    <Download size={15} />
-                    <span>Agregar a Cola de Descarga</span>
-                  </button>
+                  {isSearching ? (
+                    <div className="dl-empty-state" style={{ padding: '1.2rem 0' }}>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--phone-text-muted)' }}>
+                        Buscando pistas en YouTube...
+                      </div>
+                    </div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="dl-empty-state" style={{ padding: '1.2rem 0' }}>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--phone-text-muted)' }}>
+                        No se encontraron resultados
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="yt-results-list">
+                      {searchResults.map((item) => {
+                        const isOptionsOpen = activeResultOptionsId === item.id;
+                        return (
+                          <div key={item.id} className="yt-result-card">
+                            <div className="yt-result-top-row">
+                              <div className="yt-result-thumb-box">
+                                {isOnline && item.thumbnail ? (
+                                  <img
+                                    src={item.thumbnail}
+                                    alt=""
+                                    className="yt-result-thumb-img"
+                                  />
+                                ) : (
+                                  <div className="yt-result-thumb-fallback">
+                                    <Music size={18} />
+                                  </div>
+                                )}
+                                <span className="yt-result-duration-tag">
+                                  {item.duration}
+                                </span>
+                              </div>
+
+                              <div className="yt-result-details">
+                                <div className="yt-result-title">{item.title}</div>
+                                <div className="yt-result-artist">{item.artist}</div>
+                                <div className="yt-result-channel">
+                                  {item.channel} • {item.views}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="yt-result-actions-row">
+                              <button
+                                className="yt-dl-action-btn primary"
+                                onClick={() => handleDownloadFromResult(item)}
+                              >
+                                <Download size={13} />
+                                <span>Descargar ({selectedQuality.toUpperCase()})</span>
+                              </button>
+
+                              <button
+                                className={`yt-dl-action-btn secondary ${isOptionsOpen ? 'active' : ''}`}
+                                onClick={() =>
+                                  setActiveResultOptionsId((cur) =>
+                                    cur === item.id ? null : item.id
+                                  )
+                                }
+                                title="Opciones de descarga personalizadas"
+                              >
+                                <SlidersHorizontal size={13} />
+                                <span>Opciones</span>
+                              </button>
+                            </div>
+
+                            {/* Opciones personalizadas por pista */}
+                            {isOptionsOpen && (
+                              <div className="yt-options-panel">
+                                <div className="dl-input-label" style={{ marginBottom: '4px' }}>
+                                  Elegir formato especifico
+                                </div>
+                                <div className="yt-quality-chips-grid">
+                                  {QUALITY_OPTIONS.map((opt) => (
+                                    <button
+                                      key={opt.id}
+                                      className={`yt-quality-chip ${selectedQuality === opt.id ? 'active' : ''}`}
+                                      onClick={() => handleDownloadFromResult(item, opt.id)}
+                                    >
+                                      <span>{opt.format.toUpperCase()}</span>
+                                      <small>{opt.id}</small>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Cola activa */}
@@ -2755,7 +2959,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                           ))
                         ) : (
                           <div style={{ color: 'var(--phone-text-muted)', fontSize: '0.8rem', marginTop: '2rem' }}>
-                            Desliza o presiona la lupita para buscar el archivo .lrc / .icr / .irc
+                            Desliza o presiona la lupita para buscar el archivo .lrc de letra sincronizada
                           </div>
                         )}
                       </div>
