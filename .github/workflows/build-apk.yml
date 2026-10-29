@@ -34,6 +34,9 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x mobile/gradlew
+
       - name: Build and test
         working-directory: mobile
         run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon
