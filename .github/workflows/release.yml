@@ -1,0 +1,65 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release Executable
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies & Build Web
+        run: |
+          cd web
+          npm install
+          npm run build
+
+      - name: Compile Windows Executable
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory((Resolve-Path "web\dist"), "$env:TEMP\dist.zip")
+          & "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /optimize+ /r:System.Windows.Forms.dll,System.Drawing.dll,System.IO.Compression.FileSystem.dll /resource:"$env:TEMP\dist.zip,dist.zip" /out:"MusicaParaLosOidos.exe" "launcher\Program.cs"
+          
+          New-Item -ItemType Directory -Path "$env:TEMP\release_pkg" -Force
+          Copy-Item "MusicaParaLosOidos.exe" "$env:TEMP\release_pkg\"
+          Set-Content -Path "$env:TEMP\release_pkg\LEEME.txt" -Value "Musica para los Oidos v1.0.0`r`nEjecuta MusicaParaLosOidos.exe directamente para abrir el reproductor en modo aplicacion."
+          [System.IO.Compression.ZipFile]::CreateFromDirectory("$env:TEMP\release_pkg", "MusicaParaLosOidos-v1.0.0-Windows.zip")
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: Musica para los Oidos v1.0.0
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            MusicaParaLosOidos.exe
+            MusicaParaLosOidos-v1.0.0-Windows.zip
+          body: |
+            ### Musica para los Oidos - Version 1.0.0 (Primer Ejecutable)
+
+            **Novedades y caracteristicas:**
+            - **Ejecutable nativo para Windows**: `MusicaParaLosOidos.exe` autocontenido (sin requerir instalacion de node ni servidores externos).
+            - **Reproductor y Libreria**: Orden alfabetico, salto por letras, carpetas y organizacion completa.
+            - **Descargador de YouTube y Letras .LRC**: Sincronizacion de letras, seleccion de calidad y descarga en segundo plano.
+            - **Rastreador de YouTube en segundo plano**: Vinculacion automatica de enlaces con indicadores visuales (puntico blanco/negro agrandados para moviles) y desactivacion automatica al completar la biblioteca.
+            - **Recuperacion y Descarga Masiva**: Restauracion de coleccion completa sin corromper datos.
+            - **Bandeja de Notificaciones y Ecualizador Pro**: Selector dropdown perfeccionado con 5 bandas, bass boost y sonido 3D.
+            - **Modo Aplicacion Directa**: Integracion de todos los controles de diseno y soporte de pantalla completa.

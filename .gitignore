@@ -36,6 +36,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+*.exe
+*.zip
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json

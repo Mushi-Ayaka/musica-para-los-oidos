@@ -170,6 +170,7 @@ export default function App() {
   // CONFIGURACION DEL ESTUDIO / SIMULADOR
   const [deviceScale, setDeviceScale] = useState(0.92);
   const [isFlatDevice, setIsFlatDevice] = useState(false);
+  const [isStandaloneAppMode, setIsStandaloneAppMode] = useState(false);
   const [sidebarTab, setSidebarTab] = useState('themes');
 
   // PERSONALIZACION DE LA INTERFAZ
@@ -294,9 +295,12 @@ export default function App() {
     }
   }, [isAppVisible]);
 
+  const unlinkedTracksCount = songs.filter((s) => !s.youtubeUrl).length;
+  const hasPendingCrawl = unlinkedTracksCount > 0;
+
   // Recolector automatico de URLs de YouTube en segundo plano (Fase 3)
   useEffect(() => {
-    if (!bgCrawlerEnabled || !isOnline || !isAppVisible) return;
+    if (!bgCrawlerEnabled || !isOnline || !isAppVisible || !hasPendingCrawl) return;
 
     const intervalTime = bgCrawlerHighPriority ? 2800 : 8500;
     const interval = setInterval(() => {
@@ -342,7 +346,7 @@ export default function App() {
     }, intervalTime);
 
     return () => clearInterval(interval);
-  }, [bgCrawlerEnabled, bgCrawlerHighPriority, isOnline, isAppVisible]);
+  }, [bgCrawlerEnabled, bgCrawlerHighPriority, isOnline, isAppVisible, hasPendingCrawl]);
 
   // Parsear letras sincronizadas admitiendo .lrc, .irc y .icr
   const activeParsedLyrics = useMemo(() => {
@@ -1149,7 +1153,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
 
   return (
     <div
-      className="workbench-container"
+      className={`workbench-container ${isStandaloneAppMode ? 'standalone-app' : ''}`}
       style={{
         '--phone-bg': themeVars.bgMain,
         '--phone-surface': themeVars.bgSurface,
@@ -1571,6 +1575,14 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
           </div>
           <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
           <div
+            className={`stage-tool-item ${isStandaloneAppMode ? 'active' : ''}`}
+            onClick={() => setIsStandaloneAppMode(!isStandaloneAppMode)}
+            title="Alternar entre modo taller web y aplicacion movil directa"
+          >
+            <Smartphone size={14} />
+            <span>{isStandaloneAppMode ? 'Taller' : 'Modo App'}</span>
+          </div>
+          <div
             className="stage-tool-item"
             onClick={() => setIsFlatDevice(!isFlatDevice)}
           >
@@ -1767,15 +1779,18 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     <div className="phone-item-info">
                       <div className="phone-item-title-wrap">
                         <span className="phone-item-title">{song.title}</span>
-                        <span
-                          className={`yt-url-indicator-dot ${song.youtubeUrl ? 'linked' : 'unlinked'}`}
+                        <button
+                          type="button"
+                          className="yt-url-indicator-dot-hitbox"
                           onClick={(e) => handleOpenManualUrlModal(song, e)}
                           title={
                             song.youtubeUrl
                               ? `Enlace de YouTube vinculado (Puntico blanco): ${song.youtubeUrl}`
                               : 'Sin enlace de YouTube (Puntico negro - Toca para asignar)'
                           }
-                        />
+                        >
+                          <span className={`yt-url-indicator-dot ${song.youtubeUrl ? 'linked' : 'unlinked'}`} />
+                        </button>
                       </div>
                       <div className="phone-item-subtitle">{song.artist}</div>
                     </div>
@@ -1973,15 +1988,18 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                           <div className="phone-item-info">
                             <div className="phone-item-title-wrap">
                               <span className="phone-item-title">{song.title}</span>
-                              <span
-                                className={`yt-url-indicator-dot ${song.youtubeUrl ? 'linked' : 'unlinked'}`}
+                              <button
+                                type="button"
+                                className="yt-url-indicator-dot-hitbox"
                                 onClick={(e) => handleOpenManualUrlModal(song, e)}
                                 title={
                                   song.youtubeUrl
                                     ? `Enlace de YouTube vinculado (Puntico blanco): ${song.youtubeUrl}`
                                     : 'Sin enlace de YouTube (Puntico negro - Toca para asignar)'
                                 }
-                              />
+                              >
+                                <span className={`yt-url-indicator-dot ${song.youtubeUrl ? 'linked' : 'unlinked'}`} />
+                              </button>
                             </div>
                             <div className="phone-item-subtitle">
                               {song.artist} • {song.album}
@@ -2955,45 +2973,106 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                         {songs.filter((s) => s.youtubeUrl).length}
                       </span>
                       <span className="crawler-stat-label">
-                        <span className="yt-url-indicator-dot linked" style={{ display: 'inline-block', marginRight: '4px' }} />
+                        <span className="yt-url-indicator-dot linked" style={{ display: 'inline-block', marginRight: '6px' }} />
                         Vinculadas
                       </span>
                     </div>
                     <div className="crawler-stat-divider" />
                     <div className="crawler-stat-item">
-                      <span className="crawler-stat-num" style={{ color: 'var(--phone-text-muted)' }}>
-                        {songs.filter((s) => !s.youtubeUrl).length}
+                      <span className="crawler-stat-num" style={{ color: hasPendingCrawl ? 'var(--phone-text-muted)' : '#22c55e' }}>
+                        {unlinkedTracksCount}
                       </span>
                       <span className="crawler-stat-label">
-                        <span className="yt-url-indicator-dot unlinked" style={{ display: 'inline-block', marginRight: '4px' }} />
+                        <span className="yt-url-indicator-dot unlinked" style={{ display: 'inline-block', marginRight: '6px' }} />
                         Sin enlace
                       </span>
                     </div>
                   </div>
 
+                  {!hasPendingCrawl && (
+                    <div className="crawler-done-banner">
+                      <Check size={14} color="#22c55e" />
+                      <span>Todas las pistas tienen enlace de YouTube vinculado. Modos deshabilitados.</span>
+                    </div>
+                  )}
+
+                  {/* Toggle rastreador activo */}
                   <div
-                    className="dl-toggle-row"
-                    style={{ marginTop: '0.6rem' }}
-                    onClick={() => setBgCrawlerEnabled((v) => !v)}
+                    className={`dl-toggle-row ${!hasPendingCrawl ? 'disabled' : ''}`}
+                    style={{
+                      marginTop: '0.6rem',
+                      opacity: hasPendingCrawl ? 1 : 0.45,
+                      pointerEvents: hasPendingCrawl ? 'auto' : 'none',
+                      cursor: hasPendingCrawl ? 'pointer' : 'not-allowed'
+                    }}
+                    onClick={() => {
+                      if (!hasPendingCrawl) return;
+                      setBgCrawlerEnabled((v) => !v);
+                    }}
                   >
-                    <div className={`dl-toggle-pill ${bgCrawlerEnabled ? 'on' : 'off'}`}>
+                    <div className={`dl-toggle-pill ${bgCrawlerEnabled && hasPendingCrawl ? 'on' : 'off'}`}>
                       <div className="dl-toggle-knob" />
                     </div>
                     <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
-                      Busqueda automatica en segundo plano
+                      Busqueda automatica en segundo plano {!hasPendingCrawl ? '(Sin pistas pendientes)' : ''}
+                    </span>
+                  </div>
+
+                  {/* Toggle prioridad alta */}
+                  <div
+                    className={`dl-toggle-row ${(!hasPendingCrawl || !bgCrawlerEnabled) ? 'disabled' : ''}`}
+                    style={{
+                      marginTop: '0.5rem',
+                      opacity: (hasPendingCrawl && bgCrawlerEnabled) ? 1 : 0.45,
+                      pointerEvents: (hasPendingCrawl && bgCrawlerEnabled) ? 'auto' : 'none',
+                      cursor: (hasPendingCrawl && bgCrawlerEnabled) ? 'pointer' : 'not-allowed'
+                    }}
+                    onClick={() => {
+                      if (!hasPendingCrawl || !bgCrawlerEnabled) return;
+                      setBgCrawlerHighPriority((v) => !v);
+                    }}
+                  >
+                    <div className={`dl-toggle-pill ${bgCrawlerHighPriority && hasPendingCrawl && bgCrawlerEnabled ? 'on' : 'off'}`}>
+                      <div className="dl-toggle-knob" />
+                    </div>
+                    <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
+                      Modo Prioridad Alta (intervalo rapido)
+                    </span>
+                  </div>
+                </div>
+
+                {/* MODO DE VISUALIZACION Y EXPERIENCIA */}
+                <div className="inapp-settings-section">
+                  <div className="inapp-settings-title">
+                    <Smartphone size={16} color="var(--phone-primary)" />
+                    <span>Visualizacion y Pantalla</span>
+                  </div>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--phone-text-muted)', marginBottom: '0.8rem' }}>
+                    Ajusta si deseas ver la aplicacion en modo pantalla completa directa o dentro del taller de desarrollo:
+                  </p>
+
+                  <div
+                    className="dl-toggle-row"
+                    onClick={() => setIsStandaloneAppMode((v) => !v)}
+                  >
+                    <div className={`dl-toggle-pill ${isStandaloneAppMode ? 'on' : 'off'}`}>
+                      <div className="dl-toggle-knob" />
+                    </div>
+                    <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
+                      Modo Aplicacion Completa (Ocultar taller web)
                     </span>
                   </div>
 
                   <div
                     className="dl-toggle-row"
-                    style={{ marginTop: '0.5rem', opacity: bgCrawlerEnabled ? 1 : 0.5, pointerEvents: bgCrawlerEnabled ? 'auto' : 'none' }}
-                    onClick={() => setBgCrawlerHighPriority((v) => !v)}
+                    style={{ marginTop: '0.5rem' }}
+                    onClick={() => setIsFlatDevice((v) => !v)}
                   >
-                    <div className={`dl-toggle-pill ${bgCrawlerHighPriority ? 'on' : 'off'}`}>
+                    <div className={`dl-toggle-pill ${isFlatDevice ? 'on' : 'off'}`}>
                       <div className="dl-toggle-knob" />
                     </div>
                     <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
-                      Modo Prioridad Alta (intervalo rapido)
+                      Diseno plano sin marco de smartphone
                     </span>
                   </div>
                 </div>
