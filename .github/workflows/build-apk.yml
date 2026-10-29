@@ -1,95 +1,61 @@
-name: Build Android APK & Release
+name: Build Android APK
 
 on:
   push:
     branches:
       - main
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build-apk:
-    name: Compilar APK Android
+  build:
+    name: Build and test native Android app
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clonar repositorio
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: 'web/package.json'
-
-      - name: Configurar Java JDK 21 (Requerido por Capacitor v7)
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '21'
+          distribution: temurin
+          java-version: "17"
 
-      - name: Instalar dependencias y compilar Web
-        run: |
-          cd web
-          npm install
-          npm run build
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Generar y sincronizar proyecto Android con Capacitor
-        run: |
-          cd web
-          npx cap add android
-          npx cap sync android
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Otorgar permisos de ejecucion a gradlew
-        run: |
-          chmod +x web/android/gradlew
+      - name: Build and test
+        working-directory: mobile
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon
 
-      - name: Compilar APK Android (Debug)
-        run: |
-          cd web/android
-          ./gradlew assembleDebug --no-daemon
+      - name: Prepare ARM64 test APK
+        run: cp mobile/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk Musica-para-los-Oidos-${GITHUB_REF_NAME}-arm64.apk
 
-      - name: Preparar archivo APK final
-        run: |
-          cp web/android/app/build/outputs/apk/debug/app-debug.apk ./MusicaParaLosOidos-v1.0.0.apk
-          ls -lh MusicaParaLosOidos-v1.0.0.apk
-
-      - name: Subir artefacto APK a GitHub Actions
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MusicaParaLosOidos-v1.0.0.apk
-          path: MusicaParaLosOidos-v1.0.0.apk
+          name: Musica-para-los-Oidos-${{ github.ref_name }}-arm64
+          path: Musica-para-los-Oidos-${{ github.ref_name }}-arm64.apk
           retention-days: 30
 
-      - name: Publicar Release en GitHub con APK
+      - name: Publish prerelease
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.0
-          name: Musica para los Oidos v1.0.0 (APK Android)
-          draft: false
-          prerelease: false
-          files: |
-            MusicaParaLosOidos-v1.0.0.apk
+          name: Música para los Oídos ${{ github.ref_name }} — pruebas
+          prerelease: true
+          generate_release_notes: true
+          files: Musica-para-los-Oidos-${{ github.ref_name }}-arm64.apk
           body: |
-            ### Musica para los Oidos - Version 1.0.0 (APK Android)
+            APK Android nativo de pruebas, compilado desde Kotlin, Jetpack Compose y Media3.
 
-            Descarga oficial del paquete de instalacion para dispositivos Android (.apk).
-
-            **Instrucciones de instalacion:**
-            1. Descarga el archivo `MusicaParaLosOidos-v1.0.0.apk` en tu telefono Android.
-            2. Abre el archivo descargado y concede permiso para instalar aplicaciones de fuentes desconocidas si tu telefono lo solicita.
-            3. Disfruta de la aplicacion con reproductor, descargas y ecualizador completo.
-
-            **Caracteristicas principales:**
-            - **Descargador de YouTube y Letras .LRC**: Buscador integrado, seleccion de calidad y sincronizacion de liricas.
-            - **Rastreador de YouTube en segundo plano**: Busqueda automatica con punticos tactiles optimizados para moviles (blanco vinculado, negro sin enlace).
-            - **Bandeja de Notificaciones Integrada**: Alertas y vinculacion manual directa.
-            - **Recuperacion y Descarga Masiva Persistente**: Restauracion desde copias de seguridad sin interrumpir la reproduccion musical.
-            - **Ecualizador Pro**: Selector dropdown perfeccionado con 5 bandas, bass boost y sonido virtual 3D.
-            - **Diseno 100% responsivo para moviles**: Modo aplicacion nativa sin bordes ni elementos externos de escritorio.
+            Este APK está firmado con la clave de depuración de Android; no es una versión de producción.
+            La app reproduce archivos locales y no incluye rastreador ni descargador de YouTube.

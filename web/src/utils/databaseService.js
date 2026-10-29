@@ -87,6 +87,9 @@ export function createBackupPayload(appState) {
     cover: s.cover || '',
     plays: s.plays || 0,
     addedAt: s.addedAt || timestamp.split('T')[0],
+    youtubeUrl: s.youtubeUrl || '',
+    ytAttempted: Boolean(s.ytAttempted),
+    lyrics: Array.isArray(s.lyrics) ? s.lyrics : [],
     isFavorite: (appState.likedSongIds || []).includes(s.id)
   }));
 

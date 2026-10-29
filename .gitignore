@@ -27,6 +27,10 @@ dist-ssr
 /build/
 ios/.generated/
 android/.gradle/
+mobile/.gradle/
+mobile/.kotlin/
+mobile/local.properties
+mobile/**/build/
 
 # Editor & OS
 .DS_Store

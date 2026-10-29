@@ -1,34 +1,29 @@
-# 🎵 Música para los Oídos
+# Música para los Oídos
 
-Una experiencia musical inmersiva, moderna y accesible. Este proyecto comienza con una plataforma web interactiva y prototipo de diseño para evolucionar posteriormente a una aplicación móvil multiplataforma desarrollada en **Flutter**.
+Una aplicación de reproducción musical. Este proyecto es una alternativa a aplicaciones de musica que incluyen anuncios y layout molestos.
 
----
+La web es el prototipo visual y de interacción. La aplicación principal se está desarrollando como app Android nativa con Kotlin, Jetpack Compose y Media3.
 
-## 🚀 Hoja de Ruta (Roadmap)
+## Estado
 
-1. **Fase 1 - Web Preview & Prototipo Interactivo** 🌐
-   - Landing page interactiva con reproductor de audio integrado.
-   - Vista previa de listas de reproducción, estados de ánimo (moods), artistas y ondas sonoras visuales.
-   - Mockup interactivo con cambio de vista escritorio / móvil.
-   - Sistema de temas y diseño sonoro.
+- `web/`: preview del diseño y sus interacciones.
+- `mobile/`: app Android nativa con biblioteca local mediante Room/MediaStore, reproducción en segundo plano con Media3, álbumes, listas editables, cola modificable, ecualizador y ajustes de estilo persistentes.
+- El reproductor expandido permite deslizar entre portada y letras LRC sincronizadas. La app busca automáticamente un archivo `.lrc` con el nombre base del audio mediante MediaStore; Android puede ocultar archivos de letras no indexados por las restricciones de almacenamiento.
+- En Ajustes se pueden exportar los nombres de las canciones a TXT e importar listas JSON con el formato `{"name":"Favoritas","songs":["Cancion 1","Cancion 2"]}`. Los nombres deben coincidir de forma única con pistas de la biblioteca.
+- La cola se reordena manteniendo pulsada una pista y arrastrándola. Las pistas dentro de una lista se pueden agregar, quitar y reordenar.
+- Esta versión no ofrece rastreo de YouTube ni descargas. La paridad visual completa con el prototipo web y la validación funcional en distintos dispositivos siguen en desarrollo.
 
-2. **Fase 2 - Expansión & Funcionalidades Web** 🎧
-   - Gestión de favoritos y listas personalizadas.
-   - Explorador de géneros y recomendaciones inteligentes.
-   - Letras sincronizadas en tiempo real.
+La biblioteca reproduce archivos locales del dispositivo. Las listas, los presets del ecualizador y las preferencias visuales se guardan localmente; los archivos de audio y letras no se copian al almacenamiento interno de la aplicación.
 
-3. **Fase 3 - Aplicación Móvil (Flutter)** 📱
-   - Arquitectura limpia en Flutter (iOS y Android).
-   - Reproducción en segundo plano y controles en pantalla de bloqueo.
-   - Sincronización entre web y app móvil.
+## Requisitos para compilar Android
 
----
+- JDK 17
+- Android SDK con API 35
 
-## 🛠️ Estructura del Proyecto
+Desde Windows, en la raíz del repositorio:
 
+```powershell
+.\mobile\gradlew.bat -p mobile :app:assembleDebug
 ```
-musica-para-los-oidos/
-├── web/          # Aplicación Web & Prototipo interactivo
-├── mobile/       # Próximamente: Aplicación Flutter
-└── README.md
-```
+
+Los APKs de depuración, separados por arquitectura, se generan en `mobile/app/build/outputs/apk/debug/` (por ejemplo, `app-arm64-v8a-debug.apk`).

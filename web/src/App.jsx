@@ -4,28 +4,18 @@ import {
   Pause,
   SkipForward,
   SkipBack,
-  Volume2,
-  VolumeX,
   Heart,
   Music,
   Sliders,
   Palette,
   Folder,
-  Disc,
   ListMusic,
   Search,
-  Maximize2,
   ChevronDown,
-  Sparkles,
   Plus,
-  FileCode,
-  Smartphone,
-  Eye,
   Check,
-  Zap,
   Trash2,
   Save,
-  Headphones,
   SlidersHorizontal,
   Image as ImageIcon,
   ArrowUp,
@@ -34,30 +24,22 @@ import {
   GripVertical,
   FileText,
   Gauge,
-  ScanLine,
   Upload,
   ImageOff,
   Download,
-  Wifi,
-  WifiOff,
   Clock,
   CheckCircle,
   AlertCircle,
   XCircle,
-  RotateCcw,
-  Edit3,
-  Filter,
   ArrowDownAZ,
   Cloud,
   CloudUpload,
   CloudDownload,
   RefreshCw,
   HardDrive,
-  Database,
   Bell,
   Link,
   Link2,
-  ExternalLink,
   DownloadCloud,
   Radio,
   AlertTriangle
@@ -101,11 +83,98 @@ import {
 } from './utils/databaseService';
 import './App.css';
 
+function AppModal({
+  open,
+  onClose,
+  children,
+  className = '',
+  variant = 'center',
+  labelledBy
+}) {
+  const sheetRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previouslyFocused = document.activeElement;
+    const focusTimer = window.setTimeout(() => {
+      const target =
+        sheetRef.current?.querySelector('[data-autofocus]') || sheetRef.current;
+      target?.focus?.();
+    }, 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab' || !sheetRef.current) return;
+
+      const focusable = sheetRef.current.querySelectorAll(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className={`app-modal-backdrop ${variant === 'sheet' ? 'is-sheet' : ''}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={sheetRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+        tabIndex={-1}
+        className={`app-modal-sheet ${
+          variant === 'sheet' ? 'app-bottom-sheet' : ''
+        } ${className}`}
+      >
+        {variant === 'sheet' && <div className="sheet-grabber" aria-hidden="true" />}
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   // LIBRERIA PRINCIPAL
   const [songs, setSongs] = useState(INITIAL_SONGS);
   const [playlists, setPlaylists] = useState(INITIAL_PLAYLISTS);
-  const [folders, setFolders] = useState(FOLDERS);
+  const [folders] = useState(FOLDERS);
   const [currentSong, setCurrentSong] = useState(INITIAL_SONGS[0]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -123,7 +192,6 @@ export default function App() {
 
   // SISTEMA DE LETRAS LRC / IRC / ICR
   const [lrcFilesMap, setLrcFilesMap] = useState(MOCK_DEVICE_LRC_FILES);
-  const lrcFileInputRef = useRef(null);
 
   // IMAGEN DE FONDO PERSONALIZADA DESDE DISCO
   const wallpaperInputRef = useRef(null);
@@ -146,7 +214,7 @@ export default function App() {
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const [lastCloudSyncDate, setLastCloudSyncDate] = useState('Hoy, 22:30');
   const [autoCloudSync, setAutoCloudSync] = useState(true);
-  const [cloudAccountEmail, setCloudAccountEmail] = useState('usuario.musica@gmail.com');
+  const [cloudAccountEmail] = useState('usuario.musica@gmail.com');
   const backupFileInputRef = useRef(null);
 
   // BANDEJA DE NOTIFICACIONES Y RECOLECTOR EN SEGUNDO PLANO (FASE 3)
@@ -166,12 +234,6 @@ export default function App() {
   const [manualUrlModalSong, setManualUrlModalSong] = useState(null);
   const [manualUrlInput, setManualUrlInput] = useState('');
   const [massDownloadModalData, setMassDownloadModalData] = useState(null);
-
-  // CONFIGURACION DEL ESTUDIO / SIMULADOR
-  const [deviceScale, setDeviceScale] = useState(0.92);
-  const [isFlatDevice, setIsFlatDevice] = useState(false);
-  const [isStandaloneAppMode, setIsStandaloneAppMode] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState('themes');
 
   // PERSONALIZACION DE LA INTERFAZ
   const [activePreset, setActivePreset] = useState(THEME_PRESETS[0].id);
@@ -193,7 +255,7 @@ export default function App() {
 
   // VOLUMEN++ Y PERFIL DE SALIDA
   const [volumePercent, setVolumePercent] = useState(100);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted] = useState(false);
   const [outputProfile, setOutputProfile] = useState('studio_monitor');
 
   // DESCARGADOR DE YOUTUBE (FASE 1)
@@ -209,15 +271,122 @@ export default function App() {
   const [downloadHistory, setDownloadHistory] = useState([]);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isAppVisible, setIsAppVisible] = useState(typeof document !== 'undefined' ? !document.hidden : true);
+  const [showSplash, setShowSplash] = useState(true);
   const downloadTimersRef = useRef({});
 
   const audioRef = useRef(null);
+
+  const openModalCount =
+    Number(isPlayerModalOpen) +
+    Number(showAddTrackModal) +
+    Number(showNewPlaylistModal) +
+    Number(showNotificationsModal) +
+    Number(Boolean(manualUrlModalSong)) +
+    Number(Boolean(massDownloadModalData));
+
+  const modalHistoryCountRef = useRef(0);
+  const closingModalFromHistoryRef = useRef(false);
+  const screenHistoryRef = useRef(false);
+  const closingScreenFromHistoryRef = useRef(false);
+  const ignoreNextPopRef = useRef(false);
+
+  const closeTopModal = () => {
+    if (manualUrlModalSong) return setManualUrlModalSong(null);
+    if (massDownloadModalData) return setMassDownloadModalData(null);
+    if (showNotificationsModal) return setShowNotificationsModal(false);
+    if (showAddTrackModal) return setShowAddTrackModal(false);
+    if (showNewPlaylistModal) return setShowNewPlaylistModal(false);
+    if (isPlayerModalOpen) return setIsPlayerModalOpen(false);
+    return undefined;
+  };
+
+  const closeTopModalRef = useRef(closeTopModal);
+
+  useEffect(() => {
+    closeTopModalRef.current = closeTopModal;
+  });
+
+  // El boton atras cierra primero los modales y luego vuelve al inicio.
+  useEffect(() => {
+    if (openModalCount > modalHistoryCountRef.current) {
+      const entries = openModalCount - modalHistoryCountRef.current;
+      for (let index = 0; index < entries; index += 1) {
+        window.history.pushState(
+          { ...window.history.state, appModal: true },
+          ''
+        );
+      }
+    } else if (openModalCount < modalHistoryCountRef.current) {
+      const entries = modalHistoryCountRef.current - openModalCount;
+      if (!closingModalFromHistoryRef.current) {
+        for (let index = 0; index < entries; index += 1) {
+          ignoreNextPopRef.current = true;
+          window.history.back();
+        }
+      }
+      closingModalFromHistoryRef.current = false;
+    }
+    modalHistoryCountRef.current = openModalCount;
+  }, [openModalCount]);
+
+  useEffect(() => {
+    if (phoneScreen !== 'home' && !screenHistoryRef.current) {
+      window.history.pushState(
+        { ...window.history.state, appScreen: true },
+        ''
+      );
+      screenHistoryRef.current = true;
+    } else if (phoneScreen === 'home' && screenHistoryRef.current) {
+      screenHistoryRef.current = false;
+      if (!closingScreenFromHistoryRef.current) {
+        ignoreNextPopRef.current = true;
+        window.history.back();
+      }
+      closingScreenFromHistoryRef.current = false;
+    }
+  }, [phoneScreen]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (ignoreNextPopRef.current) {
+        ignoreNextPopRef.current = false;
+        return;
+      }
+      if (openModalCount > 0) {
+        closingModalFromHistoryRef.current = true;
+        closeTopModalRef.current();
+        return;
+      }
+      if (phoneScreen !== 'home') {
+        closingScreenFromHistoryRef.current = true;
+        setPhoneScreen('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [openModalCount, phoneScreen]);
+
+  useEffect(() => {
+    if (!isPlayerModalOpen) return undefined;
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setIsPlayerModalOpen(false);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isPlayerModalOpen]);
 
   // Inicializar Web Audio Engine
   useEffect(() => {
     if (audioRef.current) {
       audioEngine.init(audioRef.current);
     }
+  }, []);
+
+  // Splash de arranque (icono negro sobre fondo claro)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowSplash(false), 1500);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Sincronizar velocidad de reproduccion
@@ -745,7 +914,7 @@ export default function App() {
       setLastCloudSyncDate(`${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`);
       setIsSyncingDrive(false);
       alert(`Copia de seguridad sincronizada exitosamente en Google Drive (${record.accountEmail})`);
-    } catch (err) {
+    } catch {
       setIsSyncingDrive(false);
       alert('Error al sincronizar con Google Drive');
     }
@@ -780,7 +949,7 @@ export default function App() {
         if (p.downloadHistory) setDownloadHistory(p.downloadHistory);
       }
       alert('Copia de seguridad restaurada exitosamente desde Google Drive.');
-    } catch (err) {
+    } catch {
       setIsSyncingDrive(false);
       alert('Error al restaurar desde Google Drive');
     }
@@ -1119,41 +1288,9 @@ export default function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const generatedFlutterCode = `// Codigo de tema simetrico para Flutter (ThemeData)
-// Proyecto: Musica para los Oidos
-
-import 'package:flutter/material.dart';
-
-final appTheme = ThemeData(
-  brightness: Brightness.dark,
-  scaffoldBackgroundColor: const Color(0xFF${themeVars.bgMain.replace('#', '')}),
-  primaryColor: const Color(0xFF${themeVars.accentPrimary.replace('#', '')}),
-  colorScheme: const ColorScheme.dark(
-    primary: Color(0xFF${themeVars.accentPrimary.replace('#', '')}),
-    secondary: Color(0xFF${themeVars.accentSecondary.replace('#', '')}),
-    surface: Color(0xFF${themeVars.bgSurface.replace('#', '')}),
-  ),
-  cardTheme: CardTheme(
-    color: const Color(0xFF${themeVars.bgSurface.replace('#', '')}),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(${parseInt(themeVars.radius) || 16}.0),
-    ),
-  ),
-  sliderTheme: SliderThemeData(
-    activeTrackColor: const Color(0xFF${themeVars.accentPrimary.replace('#', '')}),
-    thumbColor: const Color(0xFF${themeVars.accentPrimary.replace('#', '')}),
-    overlayColor: const Color(0x33${themeVars.accentPrimary.replace('#', '')}),
-  ),
-  fontFamily: '${themeVars.fontFamily.includes('Outfit') ? 'Outfit' : 'PlusJakartaSans'}',
-);
-
-const playerBackgroundColor = Color(0xFF${(themeVars.playerBg || themeVars.bgSurface).replace('#', '')});
-const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accentPrimary).replace('#', '')});
-`;
-
   return (
     <div
-      className={`workbench-container ${isStandaloneAppMode ? 'standalone-app' : ''}`}
+      className="app-root"
       style={{
         '--phone-bg': themeVars.bgMain,
         '--phone-surface': themeVars.bgSurface,
@@ -1169,6 +1306,14 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
         '--phone-font': themeVars.fontFamily
       }}
     >
+      {showSplash && (
+        <div className="app-splash" aria-hidden="true">
+          <div className="app-splash-badge">
+            <img src="/splash-icon.png" alt="" className="app-splash-icon" />
+          </div>
+        </div>
+      )}
+
       <audio
         ref={audioRef}
         src={currentSong.audioUrl}
@@ -1196,416 +1341,8 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
         style={{ display: 'none' }}
       />
 
-      {/* PANEL LATERAL DE CONFIGURACION */}
-      <aside className="studio-sidebar">
-        <div className="studio-sidebar-header">
-          <div className="studio-title-wrap">
-            <div className="studio-logo">
-              <Headphones size={20} />
-            </div>
-            <div>
-              <h2 className="studio-brand-title">Musica para los Oidos</h2>
-              <span className="studio-brand-badge">Estudio de Interfaz</span>
-            </div>
-          </div>
-        </div>
 
-        <div className="studio-nav-tabs">
-          <button
-            className={`studio-tab-btn ${sidebarTab === 'themes' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('themes')}
-          >
-            <Palette size={14} />
-            <span>Tema Global</span>
-          </button>
-          <button
-            className={`studio-tab-btn ${sidebarTab === 'player-custom' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('player-custom')}
-          >
-            <Music size={14} />
-            <span>Reproductor</span>
-          </button>
-          <button
-            className={`studio-tab-btn ${sidebarTab === 'wallpaper' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('wallpaper')}
-          >
-            <ImageIcon size={14} />
-            <span>Fondo</span>
-          </button>
-          <button
-            className={`studio-tab-btn ${sidebarTab === 'flutter-code' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('flutter-code')}
-          >
-            <FileCode size={14} />
-            <span>Flutter</span>
-          </button>
-        </div>
-
-        <div className="studio-panel-body">
-          {sidebarTab === 'themes' && (
-            <>
-              {customStylePresets.length > 0 && (
-                <div>
-                  <div className="studio-section-title">
-                    <span>Tus Presets Guardados</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {customStylePresets.map((p) => (
-                      <div
-                        key={p.id}
-                        className={`preset-chip ${activePreset === p.id ? 'active' : ''}`}
-                        onClick={() => applyPreset(p)}
-                        style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
-                      >
-                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>{p.name}</span>
-                        <button
-                          onClick={(e) => handleDeleteStylePreset(p.id, e)}
-                          style={{ color: '#ef4444', padding: '4px' }}
-                          title="Eliminar preset"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <div className="studio-section-title">
-                  <span>Presets de Diseno</span>
-                </div>
-                <div className="theme-preset-grid">
-                  {THEME_PRESETS.map((preset) => (
-                    <div
-                      key={preset.id}
-                      className={`preset-chip ${activePreset === preset.id ? 'active' : ''}`}
-                      onClick={() => applyPreset(preset)}
-                    >
-                      <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>
-                        {preset.name}
-                      </span>
-                      <div className="preset-colors-row">
-                        <div
-                          className="color-dot"
-                          style={{ background: preset.vars.bgMain }}
-                        />
-                        <div
-                          className="color-dot"
-                          style={{ background: preset.vars.bgSurface }}
-                        />
-                        <div
-                          className="color-dot"
-                          style={{ background: preset.vars.accentPrimary }}
-                        />
-                        <div
-                          className="color-dot"
-                          style={{ background: preset.vars.accentSecondary }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="studio-section-title">
-                  <span>Guardar Estilo Actual</span>
-                </div>
-                <div className="save-style-preset-row">
-                  <input
-                    type="text"
-                    placeholder="Nombre del preset de estilo..."
-                    value={newStylePresetName}
-                    onChange={(e) => setNewStylePresetName(e.target.value)}
-                    className="style-preset-input"
-                  />
-                  <button
-                    onClick={handleSaveStylePreset}
-                    className="eq-preset-save-btn"
-                  >
-                    <Save size={13} />
-                    <span>Guardar</span>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div className="studio-section-title">
-                  <span>Colores del Sistema</span>
-                </div>
-
-                <div className="color-picker-row">
-                  <span className="color-picker-label">Fondo de Pantalla</span>
-                  <div className="color-input-wrap">
-                    <span className="color-hex-tag">{themeVars.bgMain}</span>
-                    <input
-                      type="color"
-                      className="color-input-native"
-                      value={themeVars.bgMain}
-                      onChange={(e) => handleColorChange('bgMain', e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="color-picker-row">
-                  <span className="color-picker-label">Superficie y Tarjetas</span>
-                  <div className="color-input-wrap">
-                    <span className="color-hex-tag">{themeVars.bgSurface}</span>
-                    <input
-                      type="color"
-                      className="color-input-native"
-                      value={themeVars.bgSurface}
-                      onChange={(e) =>
-                        handleColorChange('bgSurface', e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="color-picker-row">
-                  <span className="color-picker-label">Acento Primario</span>
-                  <div className="color-input-wrap">
-                    <span className="color-hex-tag">{themeVars.accentPrimary}</span>
-                    <input
-                      type="color"
-                      className="color-input-native"
-                      value={themeVars.accentPrimary}
-                      onChange={(e) =>
-                        handleColorChange('accentPrimary', e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="color-picker-row">
-                  <span className="color-picker-label">Color del Texto</span>
-                  <div className="color-input-wrap">
-                    <span className="color-hex-tag">{themeVars.textColor}</span>
-                    <input
-                      type="color"
-                      className="color-input-native"
-                      value={themeVars.textColor}
-                      onChange={(e) =>
-                        handleColorChange('textColor', e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {sidebarTab === 'player-custom' && (
-            <>
-              <div>
-                <div className="studio-section-title">
-                  <span>Color del Reproductor</span>
-                </div>
-                <div className="color-picker-row">
-                  <span className="color-picker-label">Fondo del Reproductor</span>
-                  <div className="color-input-wrap">
-                    <span className="color-hex-tag">
-                      {themeVars.playerBg || themeVars.bgSurface}
-                    </span>
-                    <input
-                      type="color"
-                      className="color-input-native"
-                      value={themeVars.playerBg || themeVars.bgSurface}
-                      onChange={(e) =>
-                        handleColorChange('playerBg', e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="color-picker-row">
-                  <span className="color-picker-label">Botones y Acento</span>
-                  <div className="color-input-wrap">
-                    <span className="color-hex-tag">
-                      {themeVars.playerAccent || themeVars.accentPrimary}
-                    </span>
-                    <input
-                      type="color"
-                      className="color-input-native"
-                      value={themeVars.playerAccent || themeVars.accentPrimary}
-                      onChange={(e) =>
-                        handleColorChange('playerAccent', e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <button
-                  className="btn-export"
-                  onClick={() => setIsPlayerModalOpen(true)}
-                >
-                  <Maximize2 size={16} />
-                  <span>Abrir Reproductor Completo</span>
-                </button>
-              </div>
-            </>
-          )}
-
-          {sidebarTab === 'wallpaper' && (
-            <div>
-              <div className="studio-section-title">
-                <span>Cargar Fondo Propio</span>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
-                <button
-                  className="btn-export"
-                  onClick={() => wallpaperInputRef.current?.click()}
-                  style={{ flex: 1 }}
-                >
-                  <Upload size={15} />
-                  <span>Subir Imagen</span>
-                </button>
-                {themeVars.bgImage && (
-                  <button
-                    className="btn-secondary"
-                    onClick={handleClearWallpaper}
-                    title="Quitar fondo actual"
-                  >
-                    <ImageOff size={15} />
-                  </button>
-                )}
-              </div>
-
-              <div className="studio-section-title">
-                <span>Imagenes Predefinidas</span>
-              </div>
-              <div className="wallpaper-grid">
-                {WALLPAPER_PRESETS.map((wp) => (
-                  <div
-                    key={wp.id}
-                    className={`wallpaper-thumb-card ${themeVars.bgImage === wp.url ? 'active' : ''}`}
-                    style={{
-                      backgroundImage: wp.url ? `url(${wp.url})` : 'none',
-                      backgroundColor: '#121020'
-                    }}
-                    onClick={() =>
-                      setThemeVars((prev) => ({ ...prev, bgImage: wp.url }))
-                    }
-                  >
-                    <span className="wallpaper-thumb-name">{wp.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {sidebarTab === 'flutter-code' && (
-            <div>
-              <div className="studio-section-title">
-                <span>ThemeData para Flutter</span>
-              </div>
-              <pre className="flutter-code-preview">{generatedFlutterCode}</pre>
-              <button
-                className="btn-export"
-                style={{ marginTop: '1rem' }}
-                onClick={() => {
-                  navigator.clipboard.writeText(generatedFlutterCode);
-                  alert('Codigo Flutter copiado');
-                }}
-              >
-                <Check size={16} />
-                <span>Copiar Codigo ThemeData</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {/* ESCENARIO PRINCIPAL: SIMULADOR DE TELEFONO */}
-      <main className="simulator-stage">
-        {/* Barra superior de herramientas */}
-        <div className="stage-toolbar">
-          <div
-            className={`stage-tool-item ${phoneScreen === 'home' ? 'active' : ''}`}
-            onClick={() => {
-              setPhoneScreen('home');
-              setIsPlayerModalOpen(false);
-            }}
-          >
-            <Music size={14} />
-            <span>Inicio</span>
-          </div>
-          <div
-            className={`stage-tool-item ${phoneScreen === 'library' ? 'active' : ''}`}
-            onClick={() => {
-              setPhoneScreen('library');
-              setIsPlayerModalOpen(false);
-            }}
-          >
-            <ListMusic size={14} />
-            <span>Libreria</span>
-          </div>
-          <div
-            className={`stage-tool-item ${phoneScreen === 'equalizer' ? 'active' : ''}`}
-            onClick={() => {
-              setPhoneScreen('equalizer');
-              setIsPlayerModalOpen(false);
-            }}
-          >
-            <Sliders size={14} />
-            <span>Ecualizador</span>
-          </div>
-          <div
-            className={`stage-tool-item ${phoneScreen === 'settings' ? 'active' : ''}`}
-            onClick={() => {
-              setPhoneScreen('settings');
-              setIsPlayerModalOpen(false);
-            }}
-          >
-            <Palette size={14} />
-            <span>Ajustes</span>
-          </div>
-          <div
-            className={`stage-tool-item ${phoneScreen === 'downloader' ? 'active' : ''}`}
-            onClick={() => {
-              setPhoneScreen('downloader');
-              setIsPlayerModalOpen(false);
-            }}
-          >
-            <Download size={14} />
-            <span>Descargar</span>
-          </div>
-          <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)' }} />
-          <div
-            className={`stage-tool-item ${isStandaloneAppMode ? 'active' : ''}`}
-            onClick={() => setIsStandaloneAppMode(!isStandaloneAppMode)}
-            title="Alternar entre modo taller web y aplicacion movil directa"
-          >
-            <Smartphone size={14} />
-            <span>{isStandaloneAppMode ? 'Taller' : 'Modo App'}</span>
-          </div>
-          <div
-            className="stage-tool-item"
-            onClick={() => setIsFlatDevice(!isFlatDevice)}
-          >
-            <Eye size={14} />
-            <span>{isFlatDevice ? 'Marco On' : 'Marco Off'}</span>
-          </div>
-          <div
-            className="stage-tool-item"
-            onClick={() => setDeviceScale((s) => (s === 1 ? 0.85 : 1))}
-          >
-            <Maximize2 size={14} />
-            <span>{Math.round(deviceScale * 100)}%</span>
-          </div>
-        </div>
-
-        {/* MARCO DEL SMARTPHONE */}
-        <div
-          className="device-scaler"
-          style={{ transform: `scale(${deviceScale})` }}
-        >
-          <div
-            className={`mobile-phone-frame ${isFlatDevice ? 'flat-mode' : ''}`}
-          >
+      <div className="app-shell">
             {themeVars.bgImage && (
               <>
                 <div
@@ -1622,37 +1359,19 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </>
             )}
 
-            {!isFlatDevice && (
-              <div className="phone-dynamic-island">
-                <div className="island-camera" />
-                <div className="island-music-indicator">
-                  <div className={`island-bar ${isPlaying ? 'active' : ''}`} />
-                  <div className={`island-bar ${isPlaying ? 'active' : ''}`} />
-                  <div className={`island-bar ${isPlaying ? 'active' : ''}`} />
-                </div>
-                <div className="island-sensor" />
-              </div>
-            )}
-
             <div className="phone-status-bar">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>9:41</span>
-                <button
-                  className="phone-notif-btn"
-                  onClick={() => setShowNotificationsModal(true)}
-                  title="Bandeja de Notificaciones"
-                >
-                  <Bell size={12} />
-                  {notifications.length > 0 && (
-                    <span className="phone-notif-badge">{notifications.length}</span>
-                  )}
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <Zap size={12} color="var(--phone-primary)" />
-                <span>5G</span>
-                <span>100%</span>
-              </div>
+              <span className="app-status-brand">Música para los Oídos</span>
+              <button
+                className="phone-notif-btn"
+                onClick={() => setShowNotificationsModal(true)}
+                title="Bandeja de notificaciones"
+                aria-label="Abrir notificaciones"
+              >
+                <Bell size={14} />
+                {notifications.length > 0 && (
+                  <span className="phone-notif-badge">{notifications.length}</span>
+                )}
+              </button>
             </div>
 
             {/* PANTALLA 1: INICIO CON TARJETAS TRANSLUCIDAS */}
@@ -2600,6 +2319,30 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     )}
                   </div>
 
+                  <div className="settings-subtitle">Imágenes Predefinidas</div>
+                  <div className="wallpaper-grid">
+                    {WALLPAPER_PRESETS.map((wp) => (
+                      <div
+                        key={wp.id}
+                        className={`wallpaper-thumb-card ${
+                          themeVars.bgImage === wp.url ? 'active' : ''
+                        }`}
+                        style={{
+                          backgroundImage: wp.url ? `url(${wp.url})` : 'none',
+                          backgroundColor: '#121020'
+                        }}
+                        onClick={() =>
+                          setThemeVars((prev) => ({
+                            ...prev,
+                            bgImage: wp.url
+                          }))
+                        }
+                      >
+                        <span className="wallpaper-thumb-name">{wp.name}</span>
+                      </div>
+                    ))}
+                  </div>
+
                   <div className="slider-control-group">
                     <div className="slider-label-row">
                       <span>Desenfoque (Blur)</span>
@@ -2848,24 +2591,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* EXPORTAR A FLUTTER */}
-                <div className="inapp-settings-section">
-                  <div className="inapp-settings-title">
-                    <FileCode size={16} color="var(--phone-primary)" />
-                    <span>Exportar a Flutter</span>
-                  </div>
-                  <button
-                    className="btn-export"
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedFlutterCode);
-                      alert('Codigo ThemeData copiado al portapapeles');
-                    }}
-                  >
-                    <Check size={16} />
-                    <span>Copiar ThemeData Generado</span>
-                  </button>
-                </div>
-
                 {/* COPIA DE SEGURIDAD Y GOOGLE DRIVE (FASE 3) */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
@@ -3041,41 +2766,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* MODO DE VISUALIZACION Y EXPERIENCIA */}
-                <div className="inapp-settings-section">
-                  <div className="inapp-settings-title">
-                    <Smartphone size={16} color="var(--phone-primary)" />
-                    <span>Visualizacion y Pantalla</span>
-                  </div>
-                  <p style={{ fontSize: '0.74rem', color: 'var(--phone-text-muted)', marginBottom: '0.8rem' }}>
-                    Ajusta si deseas ver la aplicacion en modo pantalla completa directa o dentro del taller de desarrollo:
-                  </p>
-
-                  <div
-                    className="dl-toggle-row"
-                    onClick={() => setIsStandaloneAppMode((v) => !v)}
-                  >
-                    <div className={`dl-toggle-pill ${isStandaloneAppMode ? 'on' : 'off'}`}>
-                      <div className="dl-toggle-knob" />
-                    </div>
-                    <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
-                      Modo Aplicacion Completa (Ocultar taller web)
-                    </span>
-                  </div>
-
-                  <div
-                    className="dl-toggle-row"
-                    style={{ marginTop: '0.5rem' }}
-                    onClick={() => setIsFlatDevice((v) => !v)}
-                  >
-                    <div className={`dl-toggle-pill ${isFlatDevice ? 'on' : 'off'}`}>
-                      <div className="dl-toggle-knob" />
-                    </div>
-                    <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
-                      Diseno plano sin marco de smartphone
-                    </span>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -3868,342 +3558,302 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                 <span>Descargar</span>
               </button>
             </nav>
-          </div>
-        </div>
-      </main>
 
       {/* MODAL PARA AGREGAR PISTAS A LA LISTA */}
-      {showAddTrackModal && (
-        <div
-          className="lyrics-modal-backdrop"
-          onClick={() => setShowAddTrackModal(false)}
-        >
-          <div
-            className="lyrics-card"
-            style={{ maxWidth: '400px', maxHeight: '70vh' }}
-            onClick={(e) => e.stopPropagation()}
+      <AppModal
+        open={showAddTrackModal}
+        onClose={() => setShowAddTrackModal(false)}
+        className="add-track-modal"
+        labelledBy="add-track-title"
+      >
+        <div className="app-modal-header">
+          <h3 id="add-track-title" className="app-modal-title">
+            Agregar Pista a la Lista
+          </h3>
+          <button
+            className="app-modal-close"
+            onClick={() => setShowAddTrackModal(false)}
+            aria-label="Cerrar"
           >
-            <div className="lyrics-header">
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>
-                Agregar Pista a la Lista
-              </h3>
-              <button
-                className="ctrl-btn"
-                onClick={() => setShowAddTrackModal(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.8rem' }}>
-              Selecciona una pista del catalogo para anadirla al final de la playlist:
-            </p>
-            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {songs.map((song) => (
-                <div
-                  key={song.id}
-                  className="phone-item-row"
-                  onClick={() => addTrackToQueue(song)}
-                  style={{ background: 'rgba(255,255,255,0.03)' }}
-                >
-                  <img src={song.cover} alt="" className="phone-item-thumb" />
-                  <div className="phone-item-info">
-                    <div className="phone-item-title">{song.title}</div>
-                    <div className="phone-item-subtitle">{song.artist} • {song.album}</div>
-                  </div>
-                  <Plus size={16} color="var(--phone-primary)" />
-                </div>
-              ))}
-            </div>
-          </div>
+            <X size={18} />
+          </button>
         </div>
-      )}
+        <p className="app-modal-copy">
+          Selecciona una pista del catálogo para añadirla al final de la playlist:
+        </p>
+        <div className="app-modal-list">
+          {songs.map((song) => (
+            <div
+              key={song.id}
+              className="phone-item-row"
+              onClick={() => addTrackToQueue(song)}
+              style={{ background: 'rgba(255,255,255,0.03)' }}
+            >
+              <img src={song.cover} alt="" className="phone-item-thumb" />
+              <div className="phone-item-info">
+                <div className="phone-item-title">{song.title}</div>
+                <div className="phone-item-subtitle">
+                  {song.artist} • {song.album}
+                </div>
+              </div>
+              <Plus size={16} color="var(--phone-primary)" />
+            </div>
+          ))}
+        </div>
+      </AppModal>
 
       {/* MODAL PARA CREAR PLAYLIST */}
-      {showNewPlaylistModal && (
-        <div
-          className="lyrics-modal-backdrop"
-          onClick={() => setShowNewPlaylistModal(false)}
-        >
-          <div
-            className="lyrics-card"
-            style={{ maxWidth: '380px' }}
-            onClick={(e) => e.stopPropagation()}
+      <AppModal
+        open={showNewPlaylistModal}
+        onClose={() => setShowNewPlaylistModal(false)}
+        labelledBy="new-playlist-title"
+      >
+        <div className="app-modal-header">
+          <h3 id="new-playlist-title" className="app-modal-title">
+            Nueva Lista de Reproducción
+          </h3>
+          <button
+            className="app-modal-close"
+            onClick={() => setShowNewPlaylistModal(false)}
+            aria-label="Cerrar"
           >
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '0.8rem' }}>
-              Nueva Lista de Reproduccion
-            </h3>
-            <input
-              type="text"
-              placeholder="Nombre de la lista (ej. Favoritos de Estudio)..."
-              value={newPlaylistName}
-              onChange={(e) => setNewPlaylistName(e.target.value)}
-              style={{
-                width: '100%',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '10px',
-                padding: '0.75rem 1rem',
-                color: 'white',
-                marginBottom: '1rem',
-                fontSize: '0.9rem'
-              }}
-            />
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button
-                className="btn-secondary"
-                onClick={() => setShowNewPlaylistModal(false)}
-              >
-                Cancelar
-              </button>
-              <button className="btn-primary" onClick={handleCreatePlaylist}>
-                Crear Lista
-              </button>
-            </div>
-          </div>
+            <X size={18} />
+          </button>
         </div>
-      )}
+        <input
+          type="text"
+          data-autofocus
+          placeholder="Nombre de la lista (ej. Favoritos de Estudio)..."
+          value={newPlaylistName}
+          onChange={(e) => setNewPlaylistName(e.target.value)}
+          className="app-modal-input"
+        />
+        <div className="app-modal-actions">
+          <button
+            className="btn-secondary"
+            onClick={() => setShowNewPlaylistModal(false)}
+          >
+            Cancelar
+          </button>
+          <button className="btn-primary" onClick={handleCreatePlaylist}>
+            Crear Lista
+          </button>
+        </div>
+      </AppModal>
 
       {/* BANDEJA DE NOTIFICACIONES (FASE 3) */}
-      {showNotificationsModal && (
-        <div
-          className="lyrics-modal-backdrop"
-          onClick={() => setShowNotificationsModal(false)}
-        >
-          <div
-            className="lyrics-card phone-notif-modal"
-            style={{ maxWidth: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="notif-modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Bell size={18} color="var(--phone-primary)" />
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>
-                  Notificaciones
-                </h3>
-                {notifications.length > 0 && (
-                  <span className="notif-count-pill">{notifications.length}</span>
-                )}
-              </div>
-              <button
-                className="ctrl-btn"
-                onClick={() => setShowNotificationsModal(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="notif-modal-list">
-              {notifications.length === 0 ? (
-                <div className="notif-empty-state">
-                  <Bell size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    No hay notificaciones pendientes.
-                  </p>
-                </div>
-              ) : (
-                notifications.map((notif) => (
-                  <div key={notif.id} className={`notif-card-item ${notif.type || 'info'}`}>
-                    <div className="notif-card-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {notif.type === 'alert' ? (
-                          <AlertTriangle size={14} color="#f59e0b" />
-                        ) : (
-                          <Radio size={14} color="var(--phone-primary)" />
-                        )}
-                        <strong className="notif-item-title">{notif.title}</strong>
-                      </div>
-                      <span className="notif-item-time">{notif.timestamp}</span>
-                    </div>
-                    <p className="notif-item-body">{notif.message}</p>
-                    <div className="notif-item-actions">
-                      {notif.songId && (
-                        <button
-                          className="notif-action-btn primary"
-                          onClick={() => {
-                            const song = songs.find((s) => s.id === notif.songId);
-                            if (song) {
-                              setShowNotificationsModal(false);
-                              handleOpenManualUrlModal(song);
-                            }
-                          }}
-                        >
-                          <Link2 size={12} />
-                          <span>Asignar enlace</span>
-                        </button>
-                      )}
-                      <button
-                        className="notif-action-btn secondary"
-                        onClick={() => handleDismissNotification(notif.id)}
-                      >
-                        Descartar
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
+      <AppModal
+        open={showNotificationsModal}
+        onClose={() => setShowNotificationsModal(false)}
+        className="phone-notif-modal"
+        variant="sheet"
+        labelledBy="notifications-title"
+      >
+        <div className="app-modal-header">
+          <div className="app-modal-title-group">
+            <Bell size={18} color="var(--phone-primary)" />
+            <h3 id="notifications-title" className="app-modal-title">
+              Notificaciones
+            </h3>
             {notifications.length > 0 && (
-              <div className="notif-modal-footer">
-                <button
-                  className="btn-secondary"
-                  style={{ fontSize: '0.75rem', padding: '6px 12px' }}
-                  onClick={handleClearAllNotifications}
-                >
-                  Limpiar todas
-                </button>
-              </div>
+              <span className="notif-count-pill">{notifications.length}</span>
             )}
           </div>
+          <button
+            className="app-modal-close"
+            onClick={() => setShowNotificationsModal(false)}
+            aria-label="Cerrar"
+          >
+            <X size={18} />
+          </button>
         </div>
-      )}
+
+        <div className="notif-modal-list">
+          {notifications.length === 0 ? (
+            <div className="notif-empty-state">
+              <Bell size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--phone-text-muted)' }}>
+                No hay notificaciones pendientes.
+              </p>
+            </div>
+          ) : (
+            notifications.map((notif) => (
+              <div key={notif.id} className={`notif-card-item ${notif.type || 'info'}`}>
+                <div className="notif-card-header">
+                  <div className="notif-title-wrap">
+                    {notif.type === 'alert' ? (
+                      <AlertTriangle size={14} color="#f59e0b" />
+                    ) : (
+                      <Radio size={14} color="var(--phone-primary)" />
+                    )}
+                    <strong className="notif-item-title">{notif.title}</strong>
+                  </div>
+                  <span className="notif-item-time">{notif.timestamp}</span>
+                </div>
+                <p className="notif-item-body">{notif.message}</p>
+                <div className="notif-item-actions">
+                  {notif.songId && (
+                    <button
+                      className="notif-action-btn primary"
+                      onClick={() => {
+                        const song = songs.find((s) => s.id === notif.songId);
+                        if (song) {
+                          setShowNotificationsModal(false);
+                          handleOpenManualUrlModal(song);
+                        }
+                      }}
+                    >
+                      <Link2 size={12} />
+                      <span>Asignar enlace</span>
+                    </button>
+                  )}
+                  <button
+                    className="notif-action-btn secondary"
+                    onClick={() => handleDismissNotification(notif.id)}
+                  >
+                    Descartar
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {notifications.length > 0 && (
+          <div className="notif-modal-footer">
+            <button
+              className="btn-secondary"
+              style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+              onClick={handleClearAllNotifications}
+            >
+              Limpiar todas
+            </button>
+          </div>
+        )}
+      </AppModal>
 
       {/* MODAL DE ENLACE MANUAL DE YOUTUBE (FASE 3) */}
-      {manualUrlModalSong && (
-        <div
-          className="lyrics-modal-backdrop"
-          onClick={() => setManualUrlModalSong(null)}
-        >
-          <div
-            className="lyrics-card"
-            style={{ maxWidth: '390px' }}
-            onClick={(e) => e.stopPropagation()}
+      <AppModal
+        open={Boolean(manualUrlModalSong)}
+        onClose={() => setManualUrlModalSong(null)}
+        labelledBy="manual-url-title"
+      >
+        <div className="app-modal-header">
+          <div className="app-modal-title-group">
+            <Link size={18} color="var(--phone-primary)" />
+            <h3 id="manual-url-title" className="app-modal-title">
+              Enlace de YouTube
+            </h3>
+          </div>
+          <button
+            className="app-modal-close"
+            onClick={() => setManualUrlModalSong(null)}
+            aria-label="Cerrar"
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Link size={18} color="var(--phone-primary)" />
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>
-                  Enlace de YouTube
-                </h3>
-              </div>
-              <button
-                className="ctrl-btn"
-                onClick={() => setManualUrlModalSong(null)}
-              >
-                <X size={18} />
-              </button>
-            </div>
+            <X size={18} />
+          </button>
+        </div>
 
-            <div
-              style={{
-                display: 'flex',
-                gap: '10px',
-                alignItems: 'center',
-                padding: '8px 10px',
-                borderRadius: '10px',
-                background: 'rgba(255,255,255,0.04)',
-                marginBottom: '1rem'
-              }}
-            >
+        {manualUrlModalSong && (
+          <>
+            <div className="app-modal-track">
               <img
                 src={manualUrlModalSong.cover}
                 alt=""
-                style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }}
+                className="app-modal-track-cover"
               />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div className="app-modal-track-info">
+                <div className="app-modal-track-title">
                   {manualUrlModalSong.title}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                <div className="app-modal-track-artist">
                   {manualUrlModalSong.artist}
                 </div>
               </div>
             </div>
 
-            <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
-              Introduce o edita la URL de YouTube para esta cancion offline:
+            <p className="app-modal-copy">
+              Introduce o edita la URL de YouTube para esta canción offline:
             </p>
 
             <input
               type="text"
+              data-autofocus
               placeholder="https://www.youtube.com/watch?v=..."
               value={manualUrlInput}
               onChange={(e) => setManualUrlInput(e.target.value)}
-              style={{
-                width: '100%',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.14)',
-                borderRadius: '10px',
-                padding: '0.75rem 1rem',
-                color: 'white',
-                marginBottom: '1rem',
-                fontSize: '0.82rem'
-              }}
+              className="app-modal-input"
             />
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="app-modal-actions app-modal-actions-split">
               {manualUrlModalSong.youtubeUrl ? (
                 <button
-                  className="btn-secondary"
-                  style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)', fontSize: '0.76rem', padding: '7px 12px' }}
+                  className="btn-secondary app-modal-danger"
                   onClick={handleRemoveManualUrl}
                 >
                   <Trash2 size={13} />
                   <span>Quitar enlace</span>
                 </button>
               ) : (
-                <div />
+                <span />
               )}
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="app-modal-action-group">
                 <button
                   className="btn-secondary"
-                  style={{ fontSize: '0.76rem', padding: '7px 12px' }}
                   onClick={() => setManualUrlModalSong(null)}
                 >
                   Cancelar
                 </button>
-                <button
-                  className="btn-primary"
-                  style={{ fontSize: '0.76rem', padding: '7px 14px' }}
-                  onClick={handleSaveManualUrl}
-                >
+                <button className="btn-primary" onClick={handleSaveManualUrl}>
                   <Save size={13} />
                   <span>Guardar</span>
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </AppModal>
 
       {/* MODAL DE RECUPERACION Y DESCARGA MASIVA (FASE 3) */}
-      {massDownloadModalData && (
-        <div
-          className="lyrics-modal-backdrop"
-          onClick={() => setMassDownloadModalData(null)}
-        >
-          <div
-            className="lyrics-card"
-            style={{ maxWidth: '400px' }}
-            onClick={(e) => e.stopPropagation()}
+      <AppModal
+        open={Boolean(massDownloadModalData)}
+        onClose={() => setMassDownloadModalData(null)}
+        labelledBy="mass-download-title"
+      >
+        <div className="app-modal-header">
+          <div className="app-modal-title-group">
+            <DownloadCloud size={22} color="var(--phone-primary)" />
+            <h3 id="mass-download-title" className="app-modal-title">
+              Recuperación de Música
+            </h3>
+          </div>
+          <button
+            className="app-modal-close"
+            onClick={() => setMassDownloadModalData(null)}
+            aria-label="Cerrar"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.8rem' }}>
-              <DownloadCloud size={22} color="var(--phone-primary)" />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>
-                Recuperacion de Musica
-              </h3>
-            </div>
+            <X size={18} />
+          </button>
+        </div>
 
-            <p style={{ fontSize: '0.82rem', lineHeight: 1.5, color: '#e2e8f0', marginBottom: '0.8rem' }}>
-              Se han detectado <strong style={{ color: 'var(--phone-primary)' }}>{massDownloadModalData.length} canciones</strong> con enlace de YouTube verificado en la copia importada.
+        {massDownloadModalData && (
+          <>
+            <p className="app-modal-copy">
+              Se han detectado{' '}
+              <strong style={{ color: 'var(--phone-primary)' }}>
+                {massDownloadModalData.length} canciones
+              </strong>{' '}
+              con enlace de YouTube verificado en la copia importada.
             </p>
 
-            <div
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '10px',
-                padding: '10px 12px',
-                fontSize: '0.74rem',
-                color: 'var(--text-muted)',
-                lineHeight: 1.45,
-                marginBottom: '1.2rem'
-              }}
-            >
-              Las canciones se anadiran a la cola y se descargaran de forma persistente en segundo plano sin interrumpir la reproduccion. Si sales de la app o se pierde internet, la descarga se pausara de forma segura sin corromper datos.
+            <div className="app-modal-note">
+              Las canciones se añadirán a la cola y se descargarán de forma
+              persistente en segundo plano sin interrumpir la reproducción. Si
+              sales de la app o se pierde internet, la descarga se pausará de
+              forma segura sin corromper datos.
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <div className="app-modal-actions">
               <button
                 className="btn-secondary"
                 onClick={() => setMassDownloadModalData(null)}
@@ -4218,9 +3868,10 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                 <span>Iniciar Descarga Masiva</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </AppModal>
+      </div>
     </div>
   );
 }
