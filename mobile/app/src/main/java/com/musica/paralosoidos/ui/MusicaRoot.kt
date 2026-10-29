@@ -94,6 +94,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -102,6 +103,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
@@ -140,6 +142,8 @@ import com.musica.paralosoidos.data.AmbiguousTrackConflict
 import com.musica.paralosoidos.data.TrackEntity
 import com.musica.paralosoidos.playback.AudioEffectsManager
 import com.musica.paralosoidos.playback.EqualizerBandMapper
+import com.musica.paralosoidos.playback.MAX_GAIN_DB
+import com.musica.paralosoidos.playback.MIN_GAIN_DB
 import com.musica.paralosoidos.playback.LyricsFileRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -172,11 +176,11 @@ fun MusicaRoot(
     requestAudioPermission: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(AppTab.Home) }
-    val tracks by container.tracks.observeAll().collectAsState(initial = emptyList())
+    val tracksFlow = remember(container) { container.tracks.observeAll() }
+    val tracks by tracksFlow.collectAsState(initial = emptyList())
     val themeSettings by container.preferences.themeSettings.collectAsState(
         initial = com.musica.paralosoidos.data.ThemeSettingsState()
     )
-    var themeSettingsDraft by remember(themeSettings) { mutableStateOf(themeSettings) }
     val customEqPresets by container.preferences.customEqPresets.collectAsState(initial = emptyList())
     val playlists by container.preferences.playlists.collectAsState(initial = emptyList())
 
@@ -186,8 +190,6 @@ fun MusicaRoot(
     var duration by remember { mutableFloatStateOf(1f) }
     var queueRevision by remember { mutableIntStateOf(0) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
-    var normalVolume by remember { mutableFloatStateOf(100f) }
-    val speakerBoost by AudioEffectsManager.speakerBoost.collectAsState()
     var selectedPlaylistForDetail by remember { mutableStateOf<com.musica.paralosoidos.data.MusicPlaylist?>(null) }
     var showAddTracksDialog by remember { mutableStateOf(false) }
     var pendingImportPlan by remember { mutableStateOf<PlaylistImportPlan?>(null) }
@@ -258,22 +260,12 @@ fun MusicaRoot(
     val storedOutputProfileId by container.audioOutputProfileSettings.profileId.collectAsState(
         initial = AudioOutputProfileIds.STUDIO_MONITOR
     )
-    val latestTracks by rememberUpdatedState(tracks)
+    val tracksById = remember(tracks) { tracks.associateBy { it.id.toString() } }
+    val latestTracksById by rememberUpdatedState(tracksById)
     val audioGranted = hasAudioPermission()
 
     LaunchedEffect(customEqPresets) {
         customEqPresets.forEach(AudioEffectsManager::registerCustomPreset)
-    }
-
-    LaunchedEffect(themeSettingsDraft) {
-        if (themeSettingsDraft != themeSettings) {
-            delay(300)
-            runCatching { container.preferences.saveThemeSettings(themeSettingsDraft) }
-                .onSuccess { themeMessage = null }
-                .onFailure {
-                    themeMessage = "No se pudo guardar el estilo: ${it.localizedMessage ?: "error desconocido"}"
-                }
-        }
     }
 
     LaunchedEffect(storedOutputProfileId) {
@@ -304,16 +296,30 @@ fun MusicaRoot(
         if (controller == null) return@DisposableEffect onDispose { }
         val listener = object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
-                queueRevision++
-                nowPlaying = latestTracks.firstOrNull {
-                    it.id.toString() == player.currentMediaItem?.mediaId
+                if (events.contains(Player.EVENT_TIMELINE_CHANGED) ||
+                    events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
+                ) {
+                    queueRevision++
+                    nowPlaying = latestTracksById[player.currentMediaItem?.mediaId]
                 }
-                isPlaying = player.isPlaying
-                position = player.currentPosition.coerceAtLeast(0L).toFloat()
-                duration = player.duration.takeIf { it > 0L }?.toFloat() ?: 1f
-                shuffleEnabled = player.shuffleModeEnabled
-                repeatMode = player.repeatMode
-                playbackSpeed = player.playbackParameters.speed
+                if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
+                    isPlaying = player.isPlaying
+                }
+                if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+                    duration = player.duration.takeIf { it > 0L }?.toFloat() ?: 1f
+                }
+                if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)) {
+                    position = player.currentPosition.coerceAtLeast(0L).toFloat()
+                }
+                if (events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) {
+                    shuffleEnabled = player.shuffleModeEnabled
+                }
+                if (events.contains(Player.EVENT_REPEAT_MODE_CHANGED)) {
+                    repeatMode = player.repeatMode
+                }
+                if (events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED)) {
+                    playbackSpeed = player.playbackParameters.speed
+                }
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -322,9 +328,7 @@ fun MusicaRoot(
             }
         }
         controller.addListener(listener)
-        nowPlaying = latestTracks.firstOrNull {
-            it.id.toString() == controller.currentMediaItem?.mediaId
-        }
+        nowPlaying = latestTracksById[controller.currentMediaItem?.mediaId]
         isPlaying = controller.isPlaying
         position = controller.currentPosition.coerceAtLeast(0L).toFloat()
         duration = controller.duration.takeIf { it > 0L }?.toFloat() ?: 1f
@@ -357,42 +361,42 @@ fun MusicaRoot(
         controller.play()
     }
 
-    val playbackQueue = remember(tracks, controller, queueRevision) {
+    val playbackQueue = remember(tracksById, controller, queueRevision) {
         controller?.let { player ->
             (0 until player.mediaItemCount).mapNotNull { index ->
-                tracks.firstOrNull {
-                    it.id.toString() == player.getMediaItemAt(index).mediaId
-                }
+                tracksById[player.getMediaItemAt(index).mediaId]
             }
         }.orEmpty()
     }
 
     // Filtrar y ordenar pistas de biblioteca
-    val filteredTracks = remember(tracks, searchQuery, currentSortOrder, selectedLetterFilter) {
-        var result = tracks
+    val filteredTracks by remember(tracks) {
+        derivedStateOf {
+            var result = tracks
 
-        if (searchQuery.isNotBlank()) {
-            val q = searchQuery.trim().lowercase()
-            result = result.filter {
-                it.title.lowercase().contains(q) ||
-                it.artist.lowercase().contains(q) ||
-                it.album.lowercase().contains(q)
+            if (searchQuery.isNotBlank()) {
+                val q = searchQuery.trim().lowercase()
+                result = result.filter {
+                    it.title.lowercase().contains(q) ||
+                    it.artist.lowercase().contains(q) ||
+                    it.album.lowercase().contains(q)
+                }
             }
-        }
 
-        if (selectedLetterFilter != null) {
-            val letter = selectedLetterFilter!!
-            result = if (letter == '#') {
-                result.filter { it.title.firstOrNull()?.isLetter() != true }
-            } else {
-                result.filter { it.title.startsWith(letter, ignoreCase = true) }
+            if (selectedLetterFilter != null) {
+                val letter = selectedLetterFilter!!
+                result = if (letter == '#') {
+                    result.filter { it.title.firstOrNull()?.isLetter() != true }
+                } else {
+                    result.filter { it.title.startsWith(letter, ignoreCase = true) }
+                }
             }
-        }
 
-        when (currentSortOrder) {
-            SortOrder.AZ -> result.sortedBy { it.title.lowercase() }
-            SortOrder.ZA -> result.sortedByDescending { it.title.lowercase() }
-            SortOrder.Recent -> result // Por orden de insercion/id
+            when (currentSortOrder) {
+                SortOrder.AZ -> result.sortedBy { it.title.lowercase() }
+                SortOrder.ZA -> result.sortedByDescending { it.title.lowercase() }
+                SortOrder.Recent -> result
+            }
         }
     }
 
@@ -447,7 +451,7 @@ fun MusicaRoot(
                             if (controller?.isPlaying == true) controller.pause() else controller?.play()
                         },
                         onNext = { controller?.seekToNextMediaItem() },
-                        progress = (position / duration).coerceIn(0f, 1f)
+                        progress = { (position / duration).coerceIn(0f, 1f) }
                     )
                 }
                 NavigationBar(
@@ -617,7 +621,7 @@ fun MusicaRoot(
                                     else {
                                         scanMessage = "Buscando audio..."
                                         coroutineScope.launch {
-                                            runCatching { container.refreshLocalAudio() }
+                                            runCatching { container.refreshLocalAudio(force = true) }
                                                 .onSuccess { scanMessage = null }
                                                 .onFailure { scanMessage = it.localizedMessage ?: "No se pudo leer el audio." }
                                         }
@@ -653,7 +657,7 @@ fun MusicaRoot(
                                     else {
                                         scanMessage = "Buscando audio..."
                                         coroutineScope.launch {
-                                            runCatching { container.refreshLocalAudio() }
+                                            runCatching { container.refreshLocalAudio(force = true) }
                                                 .onSuccess { scanMessage = null }
                                                 .onFailure { scanMessage = it.localizedMessage ?: "No se pudo leer el audio." }
                                         }
@@ -965,15 +969,7 @@ fun MusicaRoot(
                 AppTab.Equalizer -> {
                     item {
                         EqualizerScreenContent(
-                            normalVolume = normalVolume,
-                            onNormalVolumeChange = {
-                                normalVolume = it
-                                controller?.volume = (it / 100f).coerceIn(0f, 1f)
-                            },
-                            speakerBoost = speakerBoost,
-                            onSpeakerBoostChange = {
-                                AudioEffectsManager.setSpeakerBoost(it)
-                            },
+                            controller = controller,
                             onOutputProfileSelected = ::saveOutputProfile,
                             outputProfileMessage = audioOutputProfileMessage,
                             onSaveCustomPreset = { preset ->
@@ -993,9 +989,10 @@ fun MusicaRoot(
 
                 AppTab.Settings -> {
                     item {
-                        ThemeSettingsScreen(
-                            settings = themeSettingsDraft,
-                            onSettingsChange = { themeSettingsDraft = it }
+                        ThemeSettingsSection(
+                            savedSettings = themeSettings,
+                            onSave = { container.preferences.saveThemeSettings(it) },
+                            onMessage = { themeMessage = it }
                         )
                     }
                     item {
@@ -1044,8 +1041,8 @@ fun MusicaRoot(
                 allTracks = tracks,
                 controller = controller,
                 playing = isPlaying,
-                position = position,
-                duration = duration,
+                position = { position },
+                duration = { duration },
                 shuffleEnabled = shuffleEnabled,
                 repeatMode = repeatMode,
                 playbackSpeed = playbackSpeed,
@@ -1157,6 +1154,26 @@ fun SectionTitle(title: String, subtitle: String) {
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+@Composable
+private fun ThemeSettingsSection(
+    savedSettings: com.musica.paralosoidos.data.ThemeSettingsState,
+    onSave: suspend (com.musica.paralosoidos.data.ThemeSettingsState) -> Unit,
+    onMessage: (String?) -> Unit
+) {
+    var draft by remember(savedSettings) { mutableStateOf(savedSettings) }
+    LaunchedEffect(draft) {
+        if (draft != savedSettings) {
+            delay(300)
+            runCatching { onSave(draft) }
+                .onSuccess { onMessage(null) }
+                .onFailure {
+                    onMessage("No se pudo guardar el estilo: ${it.localizedMessage ?: "error desconocido"}")
+                }
+        }
+    }
+    ThemeSettingsScreen(settings = draft, onSettingsChange = { draft = it })
 }
 
 @Composable
@@ -1705,7 +1722,7 @@ private fun MiniPlayer(
     onOpen: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    progress: Float
+    progress: () -> Float
 ) {
     Card(
         modifier = Modifier
@@ -1717,7 +1734,7 @@ private fun MiniPlayer(
     ) {
         Column {
             LinearProgressIndicator(
-                progress = { progress },
+                progress = progress,
                 modifier = Modifier.fillMaxWidth().height(2.5.dp),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = Color(0x1AFFFFFF)
@@ -1775,8 +1792,8 @@ private fun FullPlayer(
     allTracks: List<TrackEntity>,
     controller: MediaController?,
     playing: Boolean,
-    position: Float,
-    duration: Float,
+    position: () -> Float,
+    duration: () -> Float,
     shuffleEnabled: Boolean,
     repeatMode: Int,
     playbackSpeed: Float,
@@ -1789,11 +1806,6 @@ private fun FullPlayer(
     onClose: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var sliderPosition by remember(track.id) { mutableFloatStateOf(position) }
-    var isSeeking by remember(track.id) { mutableStateOf(false) }
-    LaunchedEffect(position, isSeeking) {
-        if (!isSeeking) sliderPosition = position
-    }
 
     Column(
         Modifier
@@ -1839,7 +1851,7 @@ private fun FullPlayer(
             } else {
                 LyricsPane(
                     track = track,
-                    positionMs = position.toLong()
+                    positionMs = { position().toLong() }
                 )
             }
         }
@@ -1858,27 +1870,9 @@ private fun FullPlayer(
 
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
-        Slider(
-            value = sliderPosition.coerceIn(0f, duration.coerceAtLeast(1f)),
-            onValueChange = {
-                isSeeking = true
-                sliderPosition = it
-            },
-            onValueChangeFinished = {
-                controller?.seekTo(sliderPosition.toLong())
-                isSeeking = false
-            },
-            valueRange = 0f..duration.coerceAtLeast(1f),
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary
-            )
-        )
+        PlayerSeekBar(position = position, duration = duration, controller = controller)
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatTime(position.toLong() / 1000), style = MaterialTheme.typography.labelSmall)
-            Text(formatTime(duration.toLong() / 1000), style = MaterialTheme.typography.labelSmall)
-        }
+        PlaybackTimeLabels(position = position, duration = duration)
 
         // Controles de reproduccion principales
         Row(
@@ -2067,15 +2061,58 @@ private fun FullPlayer(
 }
 
 @Composable
+private fun PlayerSeekBar(
+    position: () -> Float,
+    duration: () -> Float,
+    controller: MediaController?
+) {
+    var sliderPosition by remember { mutableFloatStateOf(position()) }
+    var isSeeking by remember { mutableStateOf(false) }
+    LaunchedEffect(isSeeking) {
+        if (!isSeeking) {
+            snapshotFlow { position() }.collect { sliderPosition = it }
+        }
+    }
+    val durationValue = duration().coerceAtLeast(1f)
+    Slider(
+        value = sliderPosition.coerceIn(0f, durationValue),
+        onValueChange = {
+            isSeeking = true
+            sliderPosition = it
+        },
+        onValueChangeFinished = {
+            controller?.seekTo(sliderPosition.toLong())
+            isSeeking = false
+        },
+        valueRange = 0f..durationValue,
+        colors = SliderDefaults.colors(
+            thumbColor = MaterialTheme.colorScheme.primary,
+            activeTrackColor = MaterialTheme.colorScheme.primary
+        )
+    )
+}
+
+@Composable
+private fun PlaybackTimeLabels(
+    position: () -> Float,
+    duration: () -> Float
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(formatTime(position().toLong() / 1000), style = MaterialTheme.typography.labelSmall)
+        Text(formatTime(duration().toLong() / 1000), style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
 private fun LyricsPane(
         track: TrackEntity,
-        positionMs: Long
+        positionMs: () -> Long
     ) {
         val context = LocalContext.current
         var lines by remember(track.id) { mutableStateOf(emptyList<com.musica.paralosoidos.playback.LyricLine>()) }
         var message by remember(track.id) { mutableStateOf("Buscando letras...") }
-        val activeLine = remember(lines, positionMs) {
-            com.musica.paralosoidos.playback.LrcLyrics.currentLineIndex(lines, positionMs)
+        val activeLine = remember(lines, positionMs()) {
+            com.musica.paralosoidos.playback.LrcLyrics.currentLineIndex(lines, positionMs())
         }
 
         LaunchedEffect(track.id) {
@@ -2134,10 +2171,7 @@ private fun LyricsPane(
 
 @Composable
 private fun EqualizerScreenContent(
-    normalVolume: Float,
-    onNormalVolumeChange: (Float) -> Unit,
-    speakerBoost: Int,
-    onSpeakerBoostChange: (Int) -> Unit,
+    controller: MediaController?,
     onOutputProfileSelected: (String) -> Unit,
     outputProfileMessage: String?,
     onSaveCustomPreset: (com.musica.paralosoidos.data.SavedEqPreset) -> Unit
@@ -2148,6 +2182,8 @@ private fun EqualizerScreenContent(
     val selectedOutputProfile by AudioEffectsManager.selectedOutputProfile.collectAsState()
     val audioStatus by AudioEffectsManager.status.collectAsState()
     val isEnabled by AudioEffectsManager.isEnabled.collectAsState()
+    val speakerBoost by AudioEffectsManager.speakerBoost.collectAsState()
+    var normalVolume by remember { mutableFloatStateOf(100f) }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -2206,7 +2242,10 @@ private fun EqualizerScreenContent(
             }
             Slider(
                 value = normalVolume,
-                onValueChange = onNormalVolumeChange,
+                onValueChange = {
+                    normalVolume = it
+                    controller?.volume = (it / 100f).coerceIn(0f, 1f)
+                },
                 valueRange = 0f..100f,
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
@@ -2231,11 +2270,11 @@ private fun EqualizerScreenContent(
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text("Uso de Altavoz (Amplificación)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                    Text("Amplificación de hardware para altavoces", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Uso de Altavoz (Amplificación +20 dB)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                    Text("Amplificación de hardware; puede saturar en volúmenes altos", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(
-                    if (speakerBoost > 0) "$speakerBoost% (+${speakerBoost / 10} dB)" else "0%",
+                    if (speakerBoost > 0) "$speakerBoost% (+${speakerBoost / 5} dB)" else "0%",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = if (speakerBoost > 0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2246,7 +2285,7 @@ private fun EqualizerScreenContent(
             }
             Slider(
                 value = speakerBoost.toFloat(),
-                onValueChange = { onSpeakerBoostChange(it.toInt()) },
+                onValueChange = { AudioEffectsManager.setSpeakerBoost(it.toInt()) },
                 valueRange = 0f..100f,
                 colors = SliderDefaults.colors(
                     thumbColor = Color(0xFFF59E0B),
@@ -2256,8 +2295,8 @@ private fun EqualizerScreenContent(
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("0% (Apagado)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("50% (+5 dB)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("100% (+10 dB)", fontSize = 10.sp, color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold)
+                Text("50% (+10 dB)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("100% (+20 dB)", fontSize = 10.sp, color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold)
             }
         }
 
@@ -2377,7 +2416,7 @@ private fun EqualizerScreenContent(
         ) {
             Column(Modifier.padding(12.dp)) {
                 Text(
-                    "Bandas de Frecuencia (-12dB a +12dB):",
+                    "Bandas de Frecuencia (-16dB a +16dB):",
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
@@ -2571,7 +2610,8 @@ private fun VerticalEqualizerSlider(
         val normalizedY = ((y - thumbRadius) / usableHeight).coerceIn(0f, 1f)
         currentValue(EqualizerBandMapper.gainForTouchPosition(normalizedY, 1f))
     }
-    val progress = ((value.coerceIn(-12, 12) + 12) / 24f)
+    val progress = ((value.coerceIn(MIN_GAIN_DB, MAX_GAIN_DB) - MIN_GAIN_DB) /
+        (MAX_GAIN_DB - MIN_GAIN_DB).toFloat())
 
     Canvas(
         modifier = modifier
@@ -2586,7 +2626,9 @@ private fun VerticalEqualizerSlider(
             .semantics {
                 progressBarRangeInfo = ProgressBarRangeInfo(progress, 0f..1f)
                 setProgress { requested ->
-                    currentValue((requested.coerceIn(0f, 1f) * 24f - 12f).toInt())
+                    currentValue(
+                        (requested.coerceIn(0f, 1f) * (MAX_GAIN_DB - MIN_GAIN_DB) + MIN_GAIN_DB).toInt()
+                    )
                     true
                 }
             }

@@ -7,15 +7,15 @@ import org.junit.Test
 class EqualizerBandMapperTest {
     @Test
     fun touchPositionMapsTopCenterAndBottomToGainLimits() {
-        assertEquals(12, EqualizerBandMapper.gainForTouchPosition(0f, 1f))
+        assertEquals(16, EqualizerBandMapper.gainForTouchPosition(0f, 1f))
         assertEquals(0, EqualizerBandMapper.gainForTouchPosition(0.5f, 1f))
-        assertEquals(-12, EqualizerBandMapper.gainForTouchPosition(1f, 1f))
+        assertEquals(-16, EqualizerBandMapper.gainForTouchPosition(1f, 1f))
     }
 
     @Test
     fun touchPositionClampsOutsideTheSlider() {
-        assertEquals(12, EqualizerBandMapper.gainForTouchPosition(-0.2f, 1f))
-        assertEquals(-12, EqualizerBandMapper.gainForTouchPosition(1.2f, 1f))
+        assertEquals(16, EqualizerBandMapper.gainForTouchPosition(-0.2f, 1f))
+        assertEquals(-16, EqualizerBandMapper.gainForTouchPosition(1.2f, 1f))
     }
 
     @Test

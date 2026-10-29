@@ -3,6 +3,7 @@ package com.musica.paralosoidos.data
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.room.Room
 import kotlinx.serialization.json.Json
@@ -19,7 +20,9 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 class AppContainer(context: Context) {
     private val backupJson = Json { prettyPrint = true }
@@ -40,8 +43,22 @@ class AppContainer(context: Context) {
     val preferences = AppPreferences(context)
     private val backupState = database.backupStateDao()
     private val resolver = context.contentResolver
+    @Volatile private var lastLibraryRefreshAt = 0L
 
-    suspend fun refreshLocalAudio() {
+    suspend fun refreshLocalAudio(force: Boolean = false) {
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastLibraryRefreshAt < LIBRARY_REFRESH_INTERVAL_MS) return
+        withContext(Dispatchers.IO) {
+            val found = queryLocalAudio()
+            if (tracks.observeAll().first() != found) {
+                tracks.replaceAll(found)
+            }
+            relinkBackupTracks(found)
+        }
+        lastLibraryRefreshAt = SystemClock.elapsedRealtime()
+    }
+
+    private fun queryLocalAudio(): List<TrackEntity> {
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -95,8 +112,7 @@ class AppContainer(context: Context) {
             }
         } ?: error("No se pudo consultar la biblioteca multimedia del dispositivo.")
 
-        tracks.replaceAll(found)
-        relinkBackupTracks(found)
+        return found
     }
 
     suspend fun exportBackupJson(): String {
@@ -284,11 +300,18 @@ class AppContainer(context: Context) {
     }
 
     private suspend fun relinkBackupTracks(localTracks: List<TrackEntity>) {
-        val data = backupState.getDataJson()?.let {
-            runCatching { Json.parseToJsonElement(it).jsonObject }.getOrNull()
-        } ?: return
+        val storedJson = backupState.getDataJson() ?: return
+        val data = runCatching { Json.parseToJsonElement(storedJson).jsonObject }.getOrNull() ?: return
         val linkedData = BackupCodec.linkLocalTracks(data, localTracks).first
-        backupState.save(BackupStateEntity(dataJson = linkedData.toString()))
-        catalogTracks.replaceAll(BackupCodec.toCatalogTracks(linkedData))
+        val linkedJson = linkedData.toString()
+        if (linkedJson != storedJson) {
+            backupState.save(BackupStateEntity(dataJson = linkedJson))
+        }
+        val catalog = BackupCodec.toCatalogTracks(linkedData)
+        if (catalogTracks.observeAll().first() != catalog) {
+            catalogTracks.replaceAll(catalog)
+        }
     }
 }
+
+private const val LIBRARY_REFRESH_INTERVAL_MS = 60_000L

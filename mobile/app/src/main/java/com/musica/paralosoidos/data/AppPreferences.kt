@@ -103,8 +103,8 @@ class AppPreferences(context: Context) {
     }
 
     suspend fun saveCustomEqPresets(presets: List<SavedEqPreset>) {
-        require(presets.all { it.gainsDb.size == 10 && it.gainsDb.all { gain -> gain in -12..12 } }) {
-            "Los presets deben contener diez bandas entre -12 dB y +12 dB."
+        require(presets.all { it.gainsDb.size == 10 && it.gainsDb.all { gain -> gain in -16..16 } }) {
+            "Los presets deben contener diez bandas entre -16 dB y +16 dB."
         }
         dataStore.edit { preferences ->
             preferences[EQ_PRESETS_KEY] = json.encodeToString(presets)

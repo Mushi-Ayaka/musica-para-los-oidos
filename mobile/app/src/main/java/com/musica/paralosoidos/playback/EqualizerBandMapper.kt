@@ -3,13 +3,18 @@ package com.musica.paralosoidos.playback
 import kotlin.math.ln
 import kotlin.math.roundToInt
 
+internal const val MIN_GAIN_DB = -16
+internal const val MAX_GAIN_DB = 16
+
 internal object EqualizerBandMapper {
     val controlFrequenciesHz = listOf(32, 64, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000)
 
     fun gainForTouchPosition(y: Float, height: Float): Int {
         if (!height.isFinite() || height <= 0f || !y.isFinite()) return 0
         val normalized = (y / height).coerceIn(0f, 1f)
-        return ((0.5f - normalized) * 24f).roundToInt().coerceIn(-12, 12)
+        return ((0.5f - normalized) * (MAX_GAIN_DB - MIN_GAIN_DB).toFloat())
+            .roundToInt()
+            .coerceIn(MIN_GAIN_DB, MAX_GAIN_DB)
     }
 
     fun mapToHardwareLevels(
