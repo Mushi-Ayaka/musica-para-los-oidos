@@ -1,46 +1,46 @@
-// Enhanced mock library dataset for "Música para los Oídos"
+// Datos iniciales de canciones y librerias para Musica para los Oidos
 
 export const INITIAL_SONGS = [
   {
     id: 1,
     title: "Nebulosa Estelar",
     artist: "Synthwave Sunset",
-    album: "Horizontes de Neón",
+    album: "Horizontes de Neon",
     duration: 215,
-    genre: "Electrónica",
-    mood: "Energía & Enfoque",
+    genre: "Electronica",
+    mood: "Energia y Enfoque",
     cover: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    folder: "/Music/Electronic/2026",
+    folder: "/Musica/Electronica/2026",
     plays: 1420,
     addedAt: "2026-10-15",
     lyrics: [
-      "Luces de neón se encienden al caer el sol...",
-      "Un pulso eléctrico recorre la ciudad...",
+      "Luces de neon se encienden al caer el sol...",
+      "Un pulso electrico recorre la ciudad...",
       "Ondas sonoras viajan en la inmensidad...",
-      "Música para los oídos que despiertan la verdad.",
-      "Sigue el compás, siente la gravedad desvanecer.",
-      "El eco del mañana comienza hoy."
+      "Musica para los oidos que despiertan la verdad.",
+      "Sigue el compas, siente la gravedad desvanecer.",
+      "El eco del manana comienza hoy."
     ]
   },
   {
     id: 2,
-    title: "Brisa del Océano",
-    artist: "Luna Acústica",
+    title: "Brisa del Oceano",
+    artist: "Luna Acustica",
     album: "Madera y Sal",
     duration: 182,
-    genre: "Acústico",
-    mood: "Relax & Calma",
+    genre: "Acustico",
+    mood: "Calma y Relajacion",
     cover: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80",
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    folder: "/Music/Acoustic/Live",
+    folder: "/Musica/Acustico/EnVivo",
     plays: 890,
     addedAt: "2026-10-18",
     lyrics: [
       "El sonido de las olas susurra tu nombre...",
       "Cuerdas de nylon bajo el cielo abierto...",
-      "La marea se lleva cualquier preocupación...",
-      "Paz en cada acorde, un refugio en la canción."
+      "La marea se lleva cualquier preocupacion...",
+      "Paz en cada acorde, un refugio en la cancion."
     ]
   },
   {
@@ -50,17 +50,17 @@ export const INITIAL_SONGS = [
     album: "Ciudad de Cristal",
     duration: 240,
     genre: "Lo-Fi",
-    mood: "Estudio & Café",
+    mood: "Estudio y Cafe",
     cover: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-    folder: "/Music/LoFi_Beats",
+    folder: "/Musica/LoFi_Beats",
     plays: 2310,
     addedAt: "2026-10-20",
     lyrics: [
       "Taza caliente y la lluvia en el cristal...",
       "El vinilo gira suave, todo fluye natural...",
       "Ideas que toman forma en la noche sin final...",
-      "Música para los oídos, medicina sensorial."
+      "Musica para los oidos, medicina sensorial."
     ]
   },
   {
@@ -69,31 +69,31 @@ export const INITIAL_SONGS = [
     artist: "Aurora Sonora",
     album: "Frecuencias Puras",
     duration: 198,
-    genre: "Relajación",
-    mood: "Meditación",
+    genre: "Relajacion",
+    mood: "Meditacion",
     cover: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=600&auto=format&fit=crop&q=80",
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-    folder: "/Music/Ambient_Focus",
+    folder: "/Musica/Ambiental",
     plays: 640,
     addedAt: "2026-10-22",
     lyrics: [
-      "Respira hondo... suelta la tensión.",
-      "Armonías flotantes envuelven tu atención.",
+      "Respira hondo... suelta la tension.",
+      "Armonias flotantes envuelven tu atencion.",
       "El bosque respira a tu alrededor.",
-      "Silencio y notas en perfecta unión."
+      "Silencio y notas en perfecta union."
     ]
   },
   {
     id: 5,
     title: "Viaje Astral",
     artist: "Nova Quartet",
-    album: "Cuentos Eléctricos",
+    album: "Cuentos Electricos",
     duration: 228,
-    genre: "Electrónica",
-    mood: "Viajes & Creatividad",
+    genre: "Electronica",
+    mood: "Viajes y Creatividad",
     cover: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80",
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
-    folder: "/Music/Electronic/2026",
+    folder: "/Musica/Electronica/2026",
     plays: 1105,
     addedAt: "2026-10-25",
     lyrics: [
@@ -106,19 +106,19 @@ export const INITIAL_SONGS = [
   {
     id: 6,
     title: "Caminos de Cobre",
-    artist: "Sol & Cuerdas",
+    artist: "Sol y Cuerdas",
     album: "Madera y Sal",
     duration: 205,
-    genre: "Acústico",
+    genre: "Acustico",
     mood: "Atardecer",
     cover: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
-    folder: "/Music/Acoustic/Live",
+    folder: "/Musica/Acustico/EnVivo",
     plays: 520,
     addedAt: "2026-10-26",
     lyrics: [
       "Rayos dorados entre los tejados...",
-      "Un arpegio suave en los días olvidados...",
+      "Un arpegio suave en los dias olvidados...",
       "Siente la madera vibrar en tus manos."
     ]
   }
@@ -130,29 +130,57 @@ export const INITIAL_PLAYLISTS = [
     name: "Favoritos de Siempre",
     songIds: [1, 3],
     cover: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-    description: "Tus pistas más escuchadas y guardadas"
+    description: "Tus pistas mas escuchadas y guardadas"
   },
   {
     id: "pl-2",
-    name: "Noches de Código & Chill",
+    name: "Concentracion y Programacion",
     songIds: [3, 4, 1],
     cover: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
-    description: "Frecuencias perfectas para programar sin distracciones"
+    description: "Frecuencias para trabajar y estudiar sin distracciones"
   },
   {
     id: "pl-3",
-    name: "Energía & Gimnasio",
+    name: "Entrenamiento y Ritmo",
     songIds: [1, 5],
     cover: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600&auto=format&fit=crop&q=80",
-    description: "Ritmos rápidos y bajos profundos para motivarte"
+    description: "Ritmos rapidos y frecuencias con pegada"
   }
 ];
 
 export const FOLDERS = [
-  { path: "/Music/Electronic/2026", trackCount: 2, sizeMb: 24.5 },
-  { path: "/Music/Acoustic/Live", trackCount: 2, sizeMb: 19.8 },
-  { path: "/Music/LoFi_Beats", trackCount: 1, sizeMb: 11.2 },
-  { path: "/Music/Ambient_Focus", trackCount: 1, sizeMb: 9.4 }
+  { path: "/Musica/Electronica/2026", trackCount: 2, sizeMb: 24.5 },
+  { path: "/Musica/Acustico/EnVivo", trackCount: 2, sizeMb: 19.8 },
+  { path: "/Musica/LoFi_Beats", trackCount: 1, sizeMb: 11.2 },
+  { path: "/Musica/Ambiental", trackCount: 1, sizeMb: 9.4 }
+];
+
+export const WALLPAPER_PRESETS = [
+  {
+    id: "none",
+    name: "Sin imagen (Fondo Solido)",
+    url: ""
+  },
+  {
+    id: "galaxy",
+    name: "Nebulosa Espacial",
+    url: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80"
+  },
+  {
+    id: "wood",
+    name: "Madera y Acustica",
+    url: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200&auto=format&fit=crop&q=80"
+  },
+  {
+    id: "abstract",
+    name: "Ondas Abstractas",
+    url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80"
+  },
+  {
+    id: "ocean",
+    name: "Oceano Nocturno",
+    url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&auto=format&fit=crop&q=80"
+  }
 ];
 
 export const THEME_PRESETS = [
@@ -162,88 +190,108 @@ export const THEME_PRESETS = [
     description: "Negro puro absoluto para pantallas OLED, acentos cian y violeta",
     vars: {
       bgMain: "#000000",
-      bgSurface: "#09090b",
-      bgElevated: "#121215",
+      bgSurface: "#0a0a0c",
+      bgElevated: "#131317",
+      playerBg: "#0f0f14",
+      playerAccent: "#06b6d4",
       accentPrimary: "#06b6d4",
       accentSecondary: "#8b5cf6",
       accentGradient: "linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%)",
       textColor: "#ffffff",
       textMuted: "#a1a1aa",
-      radius: "24px",
-      cardStyle: "glass",
-      fontFamily: "'Plus Jakarta Sans', sans-serif"
+      radius: "20px",
+      fontFamily: "'Plus Jakarta Sans', sans-serif",
+      bgImage: "",
+      bgBlur: 16,
+      bgDim: 0.8
     }
   },
   {
     id: "cyberpunk",
     name: "Cyberpunk Neon",
-    description: "Vibraciones futuristas con fucsia neón, cian eléctrico y resplandor",
+    description: "Estilo futurista con magenta neon y cian electrico",
     vars: {
       bgMain: "#080612",
       bgSurface: "#130d29",
       bgElevated: "#1e1442",
+      playerBg: "#170f33",
+      playerAccent: "#ec4899",
       accentPrimary: "#ec4899",
       accentSecondary: "#3b82f6",
       accentGradient: "linear-gradient(135deg, #ec4899 0%, #06b6d4 100%)",
       textColor: "#fdf4ff",
       textMuted: "#d8b4fe",
       radius: "16px",
-      cardStyle: "glow",
-      fontFamily: "'Outfit', sans-serif"
+      fontFamily: "'Outfit', sans-serif",
+      bgImage: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80",
+      bgBlur: 24,
+      bgDim: 0.85
     }
   },
   {
-    id: "retro-orange",
+    id: "sunset",
     name: "Sunset Vinyl",
-    description: "Tonos cálidos ámbar y mandarina inspirados en tocadiscos vintage",
+    description: "Tonos calidos ambar y mandarina inspirados en tocadiscos clasicos",
     vars: {
-      bgMain: "#120e0a",
-      bgSurface: "#1d1712",
-      bgElevated: "#2a2119",
+      bgMain: "#100d0a",
+      bgSurface: "#1c1611",
+      bgElevated: "#292018",
+      playerBg: "#221912",
+      playerAccent: "#f97316",
       accentPrimary: "#f97316",
       accentSecondary: "#eab308",
       accentGradient: "linear-gradient(135deg, #f97316 0%, #fbbf24 100%)",
       textColor: "#fffbeb",
       textMuted: "#d6d3d1",
       radius: "20px",
-      cardStyle: "warm",
-      fontFamily: "'Plus Jakarta Sans', sans-serif"
+      fontFamily: "'Plus Jakarta Sans', sans-serif",
+      bgImage: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200&auto=format&fit=crop&q=80",
+      bgBlur: 20,
+      bgDim: 0.88
     }
   },
   {
     id: "emerald",
     name: "Emerald Forest",
-    description: "Sensación natural zen, tonos menta, esmeralda y musgo relajante",
+    description: "Sensacion natural y balanceada, tonos menta y esmeralda",
     vars: {
       bgMain: "#05110d",
       bgSurface: "#0c1f19",
       bgElevated: "#133027",
+      playerBg: "#0f261f",
+      playerAccent: "#10b981",
       accentPrimary: "#10b981",
       accentSecondary: "#14b8a6",
       accentGradient: "linear-gradient(135deg, #10b981 0%, #06b6d4 100%)",
       textColor: "#f0fdf4",
       textMuted: "#86efac",
-      radius: "28px",
-      cardStyle: "nature",
-      fontFamily: "'Plus Jakarta Sans', sans-serif"
+      radius: "24px",
+      fontFamily: "'Plus Jakarta Sans', sans-serif",
+      bgImage: "",
+      bgBlur: 16,
+      bgDim: 0.82
     }
   },
   {
     id: "monochrome",
     name: "Minimalist Mono",
-    description: "Diseño minimalista editorial en escala de grises y blanco puro",
+    description: "Diseno minimalista simetrico en escala de grises y blanco puro",
     vars: {
       bgMain: "#09090b",
-      bgSurface: "#18181b",
-      bgElevated: "#27272a",
+      bgSurface: "#141418",
+      bgElevated: "#202026",
+      playerBg: "#17171d",
+      playerAccent: "#fafafa",
       accentPrimary: "#f4f4f5",
       accentSecondary: "#a1a1aa",
       accentGradient: "linear-gradient(135deg, #ffffff 0%, #a1a1aa 100%)",
       textColor: "#fafafa",
       textMuted: "#71717a",
-      radius: "12px",
-      cardStyle: "flat",
-      fontFamily: "system-ui, sans-serif"
+      radius: "14px",
+      fontFamily: "system-ui, sans-serif",
+      bgImage: "",
+      bgBlur: 12,
+      bgDim: 0.85
     }
   }
 ];
