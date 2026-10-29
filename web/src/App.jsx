@@ -47,7 +47,13 @@ import {
   RotateCcw,
   Edit3,
   Filter,
-  ArrowDownAZ
+  ArrowDownAZ,
+  Cloud,
+  CloudUpload,
+  CloudDownload,
+  RefreshCw,
+  HardDrive,
+  Database
 } from 'lucide-react';
 
 import {
@@ -78,6 +84,14 @@ import {
   searchYouTubeSimulated,
   TRENDING_SEARCH_RESULTS
 } from './utils/youtubeUtils';
+import {
+  openAppDatabase,
+  createBackupPayload,
+  triggerBackupDownload,
+  parseAndValidateBackup,
+  uploadToGoogleDriveSimulated,
+  restoreFromGoogleDriveSimulated
+} from './utils/databaseService';
 import './App.css';
 
 export default function App() {
@@ -120,6 +134,13 @@ export default function App() {
   const [trackSortOrder, setTrackSortOrder] = useState('az');
   const [trackFolderFilter, setTrackFolderFilter] = useState('all');
   const [selectedAlphaLetter, setSelectedAlphaLetter] = useState(null);
+
+  // COPIA DE SEGURIDAD Y GOOGLE DRIVE (FASE 3)
+  const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+  const [lastCloudSyncDate, setLastCloudSyncDate] = useState('Hoy, 22:30');
+  const [autoCloudSync, setAutoCloudSync] = useState(true);
+  const [cloudAccountEmail, setCloudAccountEmail] = useState('usuario.musica@gmail.com');
+  const backupFileInputRef = useRef(null);
 
   // CONFIGURACION DEL ESTUDIO / SIMULADOR
   const [deviceScale, setDeviceScale] = useState(0.92);
@@ -203,6 +224,11 @@ export default function App() {
   useEffect(() => {
     audioEngine.setOutputProfile(outputProfile);
   }, [outputProfile]);
+
+  // Inicializar base de datos de la aplicacion (Fase 2)
+  useEffect(() => {
+    openAppDatabase();
+  }, []);
 
   // Detectar conexion a internet
   useEffect(() => {
@@ -544,6 +570,123 @@ export default function App() {
     }
   };
 
+  // --- FUNCIONES DE COPIA DE SEGURIDAD Y GOOGLE DRIVE (FASE 3) ---
+  const handleExportBackup = () => {
+    const payload = createBackupPayload({
+      playlists,
+      likedSongIds,
+      customStylePresets,
+      eqPresets,
+      themeVars,
+      volumePercent,
+      outputProfile,
+      playbackSpeed,
+      eqEnabled,
+      selectedEqPresetId,
+      downloadHistory,
+      folders,
+      trackSortOrder,
+      trackFolderFilter
+    });
+    triggerBackupDownload(payload);
+  };
+
+  const handleImportBackupFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result;
+      if (typeof content !== 'string') return;
+
+      const result = parseAndValidateBackup(content);
+      if (!result.success) {
+        alert(result.error);
+        return;
+      }
+
+      const p = result.payload;
+      if (p.playlists && p.playlists.length > 0) setPlaylists(p.playlists);
+      if (p.likedSongIds) setLikedSongIds(p.likedSongIds);
+      if (p.customStylePresets) setCustomStylePresets(p.customStylePresets);
+      if (p.eqPresets && p.eqPresets.length > 0) setEqPresets(p.eqPresets);
+      if (p.themeVars) setThemeVars(p.themeVars);
+      if (p.audioSettings) {
+        if (p.audioSettings.volumePercent !== undefined) setVolumePercent(p.audioSettings.volumePercent);
+        if (p.audioSettings.outputProfile) setOutputProfile(p.audioSettings.outputProfile);
+        if (p.audioSettings.playbackSpeed) setPlaybackSpeed(p.audioSettings.playbackSpeed);
+        if (p.audioSettings.eqEnabled !== undefined) setEqEnabled(p.audioSettings.eqEnabled);
+        if (p.audioSettings.selectedEqPresetId) setSelectedEqPresetId(p.audioSettings.selectedEqPresetId);
+      }
+      if (p.downloadHistory) setDownloadHistory(p.downloadHistory);
+      if (p.trackSortOrder) setTrackSortOrder(p.trackSortOrder);
+      if (p.trackFolderFilter) setTrackFolderFilter(p.trackFolderFilter);
+
+      alert('Copia de seguridad importada con exito. Todos tus datos y configuraciones han sido restaurados.');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleUploadToGoogleDrive = async () => {
+    setIsSyncingDrive(true);
+    const payload = createBackupPayload({
+      playlists,
+      likedSongIds,
+      customStylePresets,
+      eqPresets,
+      themeVars,
+      volumePercent,
+      outputProfile,
+      playbackSpeed,
+      eqEnabled,
+      selectedEqPresetId,
+      downloadHistory,
+      folders,
+      trackSortOrder,
+      trackFolderFilter
+    });
+
+    try {
+      const record = await uploadToGoogleDriveSimulated(payload);
+      const now = new Date();
+      setLastCloudSyncDate(`${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`);
+      setIsSyncingDrive(false);
+      alert(`Copia de seguridad sincronizada exitosamente en Google Drive (${record.accountEmail})`);
+    } catch (err) {
+      setIsSyncingDrive(false);
+      alert('Error al sincronizar con Google Drive');
+    }
+  };
+
+  const handleRestoreFromGoogleDrive = async () => {
+    setIsSyncingDrive(true);
+    try {
+      const res = await restoreFromGoogleDriveSimulated();
+      setIsSyncingDrive(false);
+      if (res.payload) {
+        const p = res.payload;
+        if (p.playlists && p.playlists.length > 0) setPlaylists(p.playlists);
+        if (p.likedSongIds) setLikedSongIds(p.likedSongIds);
+        if (p.customStylePresets) setCustomStylePresets(p.customStylePresets);
+        if (p.eqPresets && p.eqPresets.length > 0) setEqPresets(p.eqPresets);
+        if (p.themeVars) setThemeVars(p.themeVars);
+        if (p.audioSettings) {
+          if (p.audioSettings.volumePercent !== undefined) setVolumePercent(p.audioSettings.volumePercent);
+          if (p.audioSettings.outputProfile) setOutputProfile(p.audioSettings.outputProfile);
+          if (p.audioSettings.playbackSpeed) setPlaybackSpeed(p.audioSettings.playbackSpeed);
+          if (p.audioSettings.eqEnabled !== undefined) setEqEnabled(p.audioSettings.eqEnabled);
+        }
+        if (p.downloadHistory) setDownloadHistory(p.downloadHistory);
+      }
+      alert('Copia de seguridad restaurada exitosamente desde Google Drive.');
+    } catch (err) {
+      setIsSyncingDrive(false);
+      alert('Error al restaurar desde Google Drive');
+    }
+  };
+
   // Cargar imagen de fondo local desde el equipo
   const handleWallpaperFileUpload = (e) => {
     const file = e.target.files?.[0];
@@ -859,6 +1002,15 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
         ref={wallpaperInputRef}
         accept="image/*"
         onChange={handleWallpaperFileUpload}
+        style={{ display: 'none' }}
+      />
+
+      {/* Input invisible para importar archivo de copia de seguridad (Fase 3) */}
+      <input
+        type="file"
+        ref={backupFileInputRef}
+        accept=".json,application/json"
+        onChange={handleImportBackupFile}
         style={{ display: 'none' }}
       />
 
@@ -2476,6 +2628,98 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     <Check size={16} />
                     <span>Copiar ThemeData Generado</span>
                   </button>
+                </div>
+
+                {/* COPIA DE SEGURIDAD Y GOOGLE DRIVE (FASE 3) */}
+                <div className="inapp-settings-section">
+                  <div className="inapp-settings-title">
+                    <Cloud size={16} color="var(--phone-primary)" />
+                    <span>Copia de Seguridad y Nube</span>
+                  </div>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--phone-text-muted)', marginBottom: '0.8rem' }}>
+                    Exporta o importa todas tus listas, favoritos, presets de ecualizador y configuraciones para transferirlos a otro telefono sin perder nada:
+                  </p>
+
+                  {/* Botones de Exportar e Importar archivo local */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '0.8rem' }}>
+                    <button
+                      className="backup-action-btn export"
+                      onClick={handleExportBackup}
+                    >
+                      <HardDrive size={14} />
+                      <span>Exportar (.json)</span>
+                    </button>
+                    <button
+                      className="backup-action-btn import"
+                      onClick={() => backupFileInputRef.current?.click()}
+                    >
+                      <Upload size={14} />
+                      <span>Importar Copia</span>
+                    </button>
+                  </div>
+
+                  {/* Tarjeta de Google Drive */}
+                  <div className="cloud-drive-card">
+                    <div className="cloud-drive-header">
+                      <div className="cloud-drive-account">
+                        <div className="cloud-logo-circle">
+                          <Cloud size={15} color="var(--phone-primary)" />
+                        </div>
+                        <div>
+                          <div className="cloud-provider-name">Google Drive</div>
+                          <div className="cloud-account-email">{cloudAccountEmail}</div>
+                        </div>
+                      </div>
+                      <span className="cloud-status-badge">Conectado</span>
+                    </div>
+
+                    <div className="cloud-sync-info-row">
+                      <span style={{ fontSize: '0.68rem', color: 'var(--phone-text-muted)' }}>
+                        Ultima copia en nube: <strong style={{ color: 'var(--phone-text)' }}>{lastCloudSyncDate}</strong>
+                      </span>
+                      {isSyncingDrive && (
+                        <div className="cloud-syncing-pill">
+                          <RefreshCw size={11} className="spin-icon" />
+                          <span>Sincronizando</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '0.6rem' }}>
+                      <button
+                        className="btn-export"
+                        style={{ padding: '7px 8px', fontSize: '0.74rem' }}
+                        onClick={handleUploadToGoogleDrive}
+                        disabled={isSyncingDrive}
+                      >
+                        <CloudUpload size={14} />
+                        <span>Subir a Nube</span>
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '7px 8px', fontSize: '0.74rem', justifyContent: 'center' }}
+                        onClick={handleRestoreFromGoogleDrive}
+                        disabled={isSyncingDrive}
+                      >
+                        <CloudDownload size={14} />
+                        <span>Restaurar</span>
+                      </button>
+                    </div>
+
+                    {/* Toggle de sincronizacion automatica */}
+                    <div
+                      className="dl-toggle-row"
+                      style={{ marginTop: '0.6rem', paddingTop: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}
+                      onClick={() => setAutoCloudSync((v) => !v)}
+                    >
+                      <div className={`dl-toggle-pill ${autoCloudSync ? 'on' : 'off'}`}>
+                        <div className="dl-toggle-knob" />
+                      </div>
+                      <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
+                        Copia automatica en Google Drive al realizar cambios
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

@@ -2022,5 +2022,127 @@
   color: #ffffff;
 }
 
+/* ============================================================
+   COPIA DE SEGURIDAD Y GOOGLE DRIVE (FASE 3)
+   ============================================================ */
+
+.backup-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.backup-action-btn.export {
+  background: var(--phone-gradient, var(--phone-primary, #06b6d4));
+  color: #000000;
+}
+
+.backup-action-btn.export:hover {
+  opacity: 0.9;
+}
+
+.backup-action-btn.import {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--phone-text, #ffffff);
+}
+
+.backup-action-btn.import:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.cloud-drive-card {
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.cloud-drive-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.cloud-drive-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cloud-logo-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cloud-provider-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--phone-text, #ffffff);
+}
+
+.cloud-account-email {
+  font-size: 0.65rem;
+  color: var(--phone-text-muted, #94a3b8);
+}
+
+.cloud-status-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.cloud-sync-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.cloud-syncing-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.63rem;
+  color: var(--phone-primary, #06b6d4);
+  font-weight: 700;
+}
+
+@keyframes spinIcon {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-icon {
+  animation: spinIcon 1s linear infinite;
+}
+
+
 
 
