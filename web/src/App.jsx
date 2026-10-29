@@ -35,7 +35,8 @@ import {
   FileText,
   Gauge,
   ScanLine,
-  Disc3
+  Upload,
+  ImageOff
 } from 'lucide-react';
 
 import {
@@ -81,7 +82,10 @@ export default function App() {
 
   // SISTEMA DE LETRAS LRC / IRC / ICR
   const [lrcFilesMap, setLrcFilesMap] = useState(MOCK_DEVICE_LRC_FILES);
-  const fileInputRef = useRef(null);
+  const lrcFileInputRef = useRef(null);
+
+  // IMAGEN DE FONDO PERSONALIZADA DESDE DISCO
+  const wallpaperInputRef = useRef(null);
 
   // NAVEGACION DENTRO DEL TELEFONO
   const [phoneScreen, setPhoneScreen] = useState('home');
@@ -166,7 +170,6 @@ export default function App() {
     if (match && match.content) {
       return parseLRC(match.content);
     }
-    // Fallback: usar lineas de texto plano
     if (currentSong.lyrics && currentSong.lyrics.length > 0) {
       const step = (duration || 180) / currentSong.lyrics.length;
       return currentSong.lyrics.map((line, i) => ({
@@ -177,49 +180,56 @@ export default function App() {
     return [];
   }, [currentSong, lrcFilesMap, duration]);
 
-  // Indice de la linea de letra activa en tiempo real
   const currentLrcLineIndex = useMemo(() => {
     return getCurrentLrcIndex(activeParsedLyrics, currentTime);
   }, [activeParsedLyrics, currentTime]);
 
-  // Buscar e importar archivo de letra automaticamente por coincidencia de nombre
+  // Auto-importar o vincular archivo de letra
   const handleAutoImportLyric = () => {
     const match = findMatchingLyric(currentSong.title, lrcFilesMap);
     if (match) {
-      alert(`Archivo de letra vinculado automaticamente: ${match.fileName}`);
+      alert(`Archivo de letra vinculado: ${match.fileName}`);
     } else {
-      // Si no existe todavia, asociar y crear archivo sincronizado en el almacenamiento
       const newFileName = `${currentSong.title}.lrc`;
-      const generatedLrc = `[00:01.00] Letra sincronizada para ${currentSong.title}\n[00:07.00] Musica para los oidos\n[00:15.00] Frecuencia y ritmo en perfecta sintonia\n[00:25.00] Melodia que trasciende en el tiempo`;
+      const generatedLrc = `[00:01.00] Letra sincronizada para ${currentSong.title}\n[00:07.00] Musica para los oidos\n[00:15.00] Frecuencia y ritmo en armonia sensorial\n[00:25.00] Melodia que fluye en cada compas`;
       setLrcFilesMap((prev) => ({
         ...prev,
         [newFileName]: generatedLrc
       }));
-      alert(`Se encontro e indexo el archivo: ${newFileName}`);
+      alert(`Se creo y vinculo el archivo sincronizado: ${newFileName}`);
     }
   };
 
-  // Importar archivo desde el almacenamiento local del equipo
-  const handleFileUpload = (e) => {
+  // Cargar imagen de fondo local desde el equipo
+  const handleWallpaperFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const content = event.target?.result;
-      if (typeof content === 'string') {
-        setLrcFilesMap((prev) => ({
+      const dataUrl = event.target?.result;
+      if (typeof dataUrl === 'string') {
+        setThemeVars((prev) => ({
           ...prev,
-          [file.name]: content,
-          [`${currentSong.title}.lrc`]: content
+          bgImage: dataUrl,
+          bgBlur: prev.bgBlur || 16,
+          bgDim: prev.bgDim || 0.75
         }));
-        alert(`Letra cargada desde archivo: ${file.name}`);
+        alert('Imagen de fondo personalizada cargada con exito');
       }
     };
-    reader.readAsText(file);
+    reader.readAsDataURL(file);
   };
 
-  // Manejador de deslizamiento (Swipe) con el dedo o raton
+  // Quitar imagen de fondo
+  const handleClearWallpaper = () => {
+    setThemeVars((prev) => ({
+      ...prev,
+      bgImage: ''
+    }));
+  };
+
+  // Manejador de deslizamiento (Swipe)
   const handleSwipeStart = (clientX) => {
     setTouchStartX(clientX);
   };
@@ -227,18 +237,14 @@ export default function App() {
   const handleSwipeEnd = (clientX) => {
     if (touchStartX === null) return;
     const diff = touchStartX - clientX;
-    // Si desliza hacia la izquierda (mas de 40px), pasar a la lirica
     if (diff > 40) {
-      setPlayerTopTab(1);
-    }
-    // Si desliza hacia la derecha (mas de 40px), regresar a la portada
-    else if (diff < -40) {
-      setPlayerTopTab(0);
+      setPlayerTopTab(1); // Deslizar hacia la lirica
+    } else if (diff < -40) {
+      setPlayerTopTab(0); // Regresar a la portada
     }
     setTouchStartX(null);
   };
 
-  // Aplicar tema completo
   const applyPreset = (preset) => {
     setActivePreset(preset.id);
     setThemeVars({ ...preset.vars });
@@ -255,7 +261,6 @@ export default function App() {
     }));
   };
 
-  // Guardar preset de estilo
   const handleSaveStylePreset = () => {
     const name = newStylePresetName.trim();
     if (!name) return;
@@ -278,7 +283,6 @@ export default function App() {
     }
   };
 
-  // Reproduccion y pausa
   const togglePlay = () => {
     if (!audioRef.current) return;
     audioEngine.resume();
@@ -340,7 +344,7 @@ export default function App() {
     );
   };
 
-  // Arrastrar y reordenar la lista (Drag and Drop)
+  // Drag and Drop
   const handleDragStart = (index) => {
     setDraggedQueueIndex(index);
   };
@@ -383,7 +387,6 @@ export default function App() {
     setShowAddTrackModal(false);
   };
 
-  // Guardar y eliminar presets de ecualizador
   const handleSelectEqPreset = (presetId) => {
     setSelectedEqPresetId(presetId);
     const found = eqPresets.find((p) => p.id === presetId);
@@ -425,7 +428,6 @@ export default function App() {
     setSelectedEqPresetId('custom-active');
   };
 
-  // Crear Lista de reproduccion
   const handleCreatePlaylist = () => {
     const name = newPlaylistName.trim();
     if (!name) return;
@@ -448,7 +450,6 @@ export default function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Codigo generado para Flutter
   const generatedFlutterCode = `// Codigo de tema simetrico para Flutter (ThemeData)
 // Proyecto: Musica para los Oidos
 
@@ -508,12 +509,12 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
         onEnded={handleNext}
       />
 
-      {/* Input invisible para importar archivos .lrc / .irc / .icr */}
+      {/* Input invisible para cargar imagen de fondo personalizada */}
       <input
         type="file"
-        ref={fileInputRef}
-        accept=".lrc,.irc,.icr,.txt"
-        onChange={handleFileUpload}
+        ref={wallpaperInputRef}
+        accept="image/*"
+        onChange={handleWallpaperFileUpload}
         style={{ display: 'none' }}
       />
 
@@ -773,7 +774,30 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
           {sidebarTab === 'wallpaper' && (
             <div>
               <div className="studio-section-title">
-                <span>Imagenes de Fondo</span>
+                <span>Cargar Fondo Propio</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
+                <button
+                  className="btn-export"
+                  onClick={() => wallpaperInputRef.current?.click()}
+                  style={{ flex: 1 }}
+                >
+                  <Upload size={15} />
+                  <span>Subir Imagen</span>
+                </button>
+                {themeVars.bgImage && (
+                  <button
+                    className="btn-secondary"
+                    onClick={handleClearWallpaper}
+                    title="Quitar fondo actual"
+                  >
+                    <ImageOff size={15} />
+                  </button>
+                )}
+              </div>
+
+              <div className="studio-section-title">
+                <span>Imagenes Predefinidas</span>
               </div>
               <div className="wallpaper-grid">
                 {WALLPAPER_PRESETS.map((wp) => (
@@ -897,7 +921,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                 />
                 <div
                   className="phone-bg-dim-overlay"
-                  style={{ opacity: themeVars.bgDim || 0.8 }}
+                  style={{ opacity: themeVars.bgDim || 0.7 }}
                 />
               </>
             )}
@@ -923,7 +947,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </div>
             </div>
 
-            {/* PANTALLA 1: INICIO */}
+            {/* PANTALLA 1: INICIO CON TARJETAS TRANSLUCIDAS */}
             {phoneScreen === 'home' && (
               <div className="phone-viewport">
                 <div className="phone-screen-header">
@@ -945,11 +969,12 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                       width: '36px',
                       height: '36px',
                       borderRadius: '50%',
-                      background: 'var(--phone-surface)',
+                      background: 'rgba(255,255,255,0.08)',
+                      backdropFilter: 'blur(12px)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      border: '1px solid rgba(255,255,255,0.08)'
+                      border: '1px solid rgba(255,255,255,0.1)'
                     }}
                   >
                     <Heart size={16} color="var(--phone-primary)" />
@@ -958,7 +983,8 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
 
                 <div
                   style={{
-                    background: 'var(--phone-surface)',
+                    background: 'rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(16px)',
                     borderRadius: 'var(--phone-radius)',
                     padding: '1rem',
                     marginBottom: '1.25rem',
@@ -1034,7 +1060,8 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     style={{
                       padding: '6px 14px',
                       borderRadius: '999px',
-                      background: 'var(--phone-surface)',
+                      background: 'rgba(255,255,255,0.08)',
+                      backdropFilter: 'blur(12px)',
                       fontSize: '0.75rem',
                       fontWeight: 700,
                       color: 'var(--phone-primary)',
@@ -1047,10 +1074,12 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     style={{
                       padding: '6px 14px',
                       borderRadius: '999px',
-                      background: 'var(--phone-surface)',
+                      background: 'rgba(255,255,255,0.06)',
+                      backdropFilter: 'blur(12px)',
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      color: 'var(--phone-text-muted)'
+                      color: 'var(--phone-text-muted)',
+                      border: '1px solid rgba(255,255,255,0.08)'
                     }}
                   >
                     Lo-Fi
@@ -1059,10 +1088,12 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     style={{
                       padding: '6px 14px',
                       borderRadius: '999px',
-                      background: 'var(--phone-surface)',
+                      background: 'rgba(255,255,255,0.06)',
+                      backdropFilter: 'blur(12px)',
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      color: 'var(--phone-text-muted)'
+                      color: 'var(--phone-text-muted)',
+                      border: '1px solid rgba(255,255,255,0.08)'
                     }}
                   >
                     Meditacion
@@ -1107,7 +1138,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </div>
             )}
 
-            {/* PANTALLA 2: LIBRERIA (CABECERA Y PESTANAS STICKY) */}
+            {/* PANTALLA 2: LIBRERIA */}
             {phoneScreen === 'library' && (
               <div className="phone-viewport">
                 <div className="phone-screen-header">
@@ -1228,9 +1259,11 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                                   alignItems: 'center',
                                   gap: '12px',
                                   marginBottom: '0.8rem',
-                                  background: 'var(--phone-surface)',
+                                  background: 'rgba(255,255,255,0.06)',
+                                  backdropFilter: 'blur(16px)',
                                   padding: '12px',
-                                  borderRadius: 'var(--phone-radius)'
+                                  borderRadius: 'var(--phone-radius)',
+                                  border: '1px solid rgba(255,255,255,0.08)'
                                 }}
                               >
                                 <img
@@ -1343,9 +1376,11 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                                   alignItems: 'center',
                                   gap: '12px',
                                   marginBottom: '0.8rem',
-                                  background: 'var(--phone-surface)',
+                                  background: 'rgba(255,255,255,0.06)',
+                                  backdropFilter: 'blur(16px)',
                                   padding: '12px',
-                                  borderRadius: 'var(--phone-radius)'
+                                  borderRadius: 'var(--phone-radius)',
+                                  border: '1px solid rgba(255,255,255,0.08)'
                                 }}
                               >
                                 <img
@@ -1458,11 +1493,13 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     <div
                       style={{
                         padding: '10px 14px',
-                        background: 'rgba(255,255,255,0.03)',
+                        background: 'rgba(255,255,255,0.05)',
+                        backdropFilter: 'blur(12px)',
                         borderRadius: 'var(--phone-radius)',
                         marginBottom: '1rem',
                         fontSize: '0.78rem',
-                        color: 'var(--phone-text-muted)'
+                        color: 'var(--phone-text-muted)',
+                        border: '1px solid rgba(255,255,255,0.06)'
                       }}
                     >
                       Explorador de almacenamiento interno del dispositivo:
@@ -1474,7 +1511,8 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                             width: '42px',
                             height: '42px',
                             borderRadius: '10px',
-                            background: 'var(--phone-surface)',
+                            background: 'rgba(255,255,255,0.08)',
+                            backdropFilter: 'blur(12px)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -1496,7 +1534,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </div>
             )}
 
-            {/* PANTALLA 3: ECUALIZADOR CON VOLUMEN++ */}
+            {/* PANTALLA 3: ECUALIZADOR */}
             {phoneScreen === 'equalizer' && (
               <div className="phone-viewport eq-screen-wrap">
                 <div className="phone-screen-header">
@@ -1738,13 +1776,88 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   <h2 className="phone-screen-title">Configuracion</h2>
                 </div>
 
-                {/* 1. VELOCIDAD DE REPRODUCCION */}
+                {/* CARGAR IMAGEN DE FONDO PERSONALIZADA */}
+                <div className="inapp-settings-section">
+                  <div className="inapp-settings-title">
+                    <ImageIcon size={16} color="var(--phone-primary)" />
+                    <span>Fondo de Pantalla Personalizado</span>
+                  </div>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--phone-text-muted)', marginBottom: '0.8rem' }}>
+                    Sube una foto o imagen desde tu equipo para usar como fondo transparente:
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '0.8rem' }}>
+                    <button
+                      className="btn-export"
+                      onClick={() => wallpaperInputRef.current?.click()}
+                      style={{ flex: 1 }}
+                    >
+                      <Upload size={14} />
+                      <span>Cargar Imagen Propia</span>
+                    </button>
+                    {themeVars.bgImage && (
+                      <button
+                        className="btn-secondary"
+                        onClick={handleClearWallpaper}
+                        title="Quitar fondo actual"
+                      >
+                        <ImageOff size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="slider-control-group">
+                    <div className="slider-label-row">
+                      <span>Desenfoque (Blur)</span>
+                      <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                        {themeVars.bgBlur || 16}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="40"
+                      value={themeVars.bgBlur || 16}
+                      onChange={(e) =>
+                        setThemeVars((prev) => ({
+                          ...prev,
+                          bgBlur: parseInt(e.target.value)
+                        }))
+                      }
+                      className="range-input"
+                    />
+                  </div>
+
+                  <div className="slider-control-group">
+                    <div className="slider-label-row">
+                      <span>Atenuacion de Fondo</span>
+                      <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                        {Math.round((themeVars.bgDim || 0.7) * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="0.95"
+                      step="0.05"
+                      value={themeVars.bgDim || 0.7}
+                      onChange={(e) =>
+                        setThemeVars((prev) => ({
+                          ...prev,
+                          bgDim: parseFloat(e.target.value)
+                        }))
+                      }
+                      className="range-input"
+                    />
+                  </div>
+                </div>
+
+                {/* VELOCIDAD DE REPRODUCCION */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <Gauge size={16} color="var(--phone-primary)" />
                     <span>Velocidad de Reproduccion</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', marginBottom: '0.6rem' }}>
+                  <div style={{ display: 'flex', gap: '6px', overflowX: 'auto' }}>
                     {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) => (
                       <button
                         key={speed}
@@ -1767,7 +1880,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* 2. GUARDAR PRESET DE ESTILO */}
+                {/* GUARDAR PRESET DE ESTILO */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <Save size={16} color="var(--phone-primary)" />
@@ -1816,7 +1929,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   )}
                 </div>
 
-                {/* 3. TEMAS PREDEFINIDOS */}
+                {/* TEMAS PREDEFINIDOS */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <Palette size={16} color="var(--phone-primary)" />
@@ -1846,7 +1959,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* 4. COLORES DE LA INTERFAZ */}
+                {/* COLORES DE LA INTERFAZ */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <SlidersHorizontal size={16} color="var(--phone-primary)" />
@@ -1867,7 +1980,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
 
                   <div className="color-picker-row">
-                    <span className="color-picker-label">Tarjetas / Superficie</span>
+                    <span className="color-picker-label">Superficie y Tarjetas</span>
                     <div className="color-input-wrap">
                       <span className="color-hex-tag">{themeVars.bgSurface}</span>
                       <input
@@ -1906,7 +2019,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* 5. COLOR DEL REPRODUCTOR */}
+                {/* COLOR DEL REPRODUCTOR */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <Music size={16} color="var(--phone-player-accent)" />
@@ -1940,7 +2053,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* 6. CODIGO FLUTTER */}
+                {/* EXPORTAR A FLUTTER */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <FileCode size={16} color="var(--phone-primary)" />
@@ -1997,7 +2110,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
             {/* REPRODUCTOR A PANTALLA COMPLETA */}
             {isPlayerModalOpen && (
               <div className="phone-player-modal">
-                {/* Cabecera superior */}
                 <div className="phone-modal-nav">
                   <button
                     onClick={() => setIsPlayerModalOpen(false)}
@@ -2032,7 +2144,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </button>
                 </div>
 
-                {/* MITAD SUPERIOR DESLIZABLE: PORTADA <-> LIRICA (.LRC / .ICR / .IRC) */}
+                {/* MITAD SUPERIOR DESLIZABLE: PORTADA <-> LIRICA */}
                 <div
                   className="player-top-slider-wrapper"
                   onTouchStart={(e) => handleSwipeStart(e.touches[0].clientX)}
@@ -2061,7 +2173,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                         </div>
                       </div>
 
-                      {/* Barra de progreso */}
                       <div className="player-progress-wrap">
                         <div
                           className="player-progress-bar"
@@ -2086,7 +2197,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                         </div>
                       </div>
 
-                      {/* Controles principales */}
                       <div className="player-controls-compact">
                         <button
                           onClick={() => {
@@ -2141,7 +2251,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                         )}
                       </div>
 
-                      {/* Lupita abajo a la derecha para auto-importar archivo .lrc / .irc / .icr */}
                       <button
                         className="lyrics-search-fab"
                         onClick={handleAutoImportLyric}
@@ -2152,7 +2261,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     </div>
                   </div>
 
-                  {/* Indicador de deslizamiento */}
                   <div className="slide-indicator-pills">
                     <div
                       className={`slide-dot ${playerTopTab === 0 ? 'active' : ''}`}
