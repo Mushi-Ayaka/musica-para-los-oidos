@@ -53,7 +53,14 @@ import {
   CloudDownload,
   RefreshCw,
   HardDrive,
-  Database
+  Database,
+  Bell,
+  Link,
+  Link2,
+  ExternalLink,
+  DownloadCloud,
+  Radio,
+  AlertTriangle
 } from 'lucide-react';
 
 import {
@@ -141,6 +148,24 @@ export default function App() {
   const [autoCloudSync, setAutoCloudSync] = useState(true);
   const [cloudAccountEmail, setCloudAccountEmail] = useState('usuario.musica@gmail.com');
   const backupFileInputRef = useRef(null);
+
+  // BANDEJA DE NOTIFICACIONES Y RECOLECTOR EN SEGUNDO PLANO (FASE 3)
+  const [notifications, setNotifications] = useState([
+    {
+      id: 'notif-1',
+      title: 'Enlace pendiente',
+      message: 'No se encontro enlace automatico para "Brisa del Oceano". Toca para asignarlo manualmente.',
+      type: 'warning',
+      timestamp: 'Hace 5 min',
+      songId: 2
+    }
+  ]);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [bgCrawlerEnabled, setBgCrawlerEnabled] = useState(true);
+  const [bgCrawlerHighPriority, setBgCrawlerHighPriority] = useState(false);
+  const [manualUrlModalSong, setManualUrlModalSong] = useState(null);
+  const [manualUrlInput, setManualUrlInput] = useState('');
+  const [massDownloadModalData, setMassDownloadModalData] = useState(null);
 
   // CONFIGURACION DEL ESTUDIO / SIMULADOR
   const [deviceScale, setDeviceScale] = useState(0.92);
@@ -268,6 +293,56 @@ export default function App() {
       ));
     }
   }, [isAppVisible]);
+
+  // Recolector automatico de URLs de YouTube en segundo plano (Fase 3)
+  useEffect(() => {
+    if (!bgCrawlerEnabled || !isOnline || !isAppVisible) return;
+
+    const intervalTime = bgCrawlerHighPriority ? 2800 : 8500;
+    const interval = setInterval(() => {
+      setSongs((prevSongs) => {
+        const targetIndex = prevSongs.findIndex((s) => !s.youtubeUrl && !s.ytAttempted);
+        if (targetIndex === -1) return prevSongs;
+
+        const targetSong = prevSongs[targetIndex];
+        const found = Math.random() > 0.25;
+
+        if (found) {
+          const generatedId = `sim_${targetSong.id}_${Date.now().toString(36).slice(-3)}`;
+          const verifiedUrl = `https://youtu.be/${generatedId}`;
+          const updated = [...prevSongs];
+          updated[targetIndex] = { ...targetSong, youtubeUrl: verifiedUrl, ytAttempted: true };
+
+          setNotifications((notifs) => [
+            {
+              id: `notif-${Date.now()}`,
+              title: 'Enlace recolectado',
+              message: `Se vinculo enlace de YouTube verificado para "${targetSong.title}".`,
+              type: 'info',
+              timestamp: 'Ahora'
+            },
+            ...notifs
+          ]);
+          return updated;
+        } else {
+          const newNotif = {
+            id: `notif-${Date.now()}`,
+            title: 'Enlace pendiente',
+            message: `No se encontro enlace automatico para "${targetSong.title}". Toca para asignarlo manualmente.`,
+            type: 'warning',
+            timestamp: 'Ahora',
+            songId: targetSong.id
+          };
+          setNotifications((notifs) => [newNotif, ...notifs]);
+          const updated = [...prevSongs];
+          updated[targetIndex] = { ...targetSong, ytAttempted: true };
+          return updated;
+        }
+      });
+    }, intervalTime);
+
+    return () => clearInterval(interval);
+  }, [bgCrawlerEnabled, bgCrawlerHighPriority, isOnline, isAppVisible]);
 
   // Parsear letras sincronizadas admitiendo .lrc, .irc y .icr
   const activeParsedLyrics = useMemo(() => {
@@ -609,7 +684,13 @@ export default function App() {
       }
 
       const p = result.payload;
-      if (p.tracks && p.tracks.length > 0) setSongs(p.tracks);
+      if (p.tracks && p.tracks.length > 0) {
+        setSongs(p.tracks);
+        const tracksWithYt = p.tracks.filter((t) => t.youtubeUrl);
+        if (tracksWithYt.length > 0) {
+          setMassDownloadModalData(tracksWithYt);
+        }
+      }
       if (p.lrcFilesMap) setLrcFilesMap((prev) => ({ ...prev, ...p.lrcFilesMap }));
       if (p.playlists && p.playlists.length > 0) setPlaylists(p.playlists);
       if (p.likedSongIds) setLikedSongIds(p.likedSongIds);
@@ -673,7 +754,13 @@ export default function App() {
       setIsSyncingDrive(false);
       if (res.payload) {
         const p = res.payload;
-        if (p.tracks && p.tracks.length > 0) setSongs(p.tracks);
+        if (p.tracks && p.tracks.length > 0) {
+          setSongs(p.tracks);
+          const tracksWithYt = p.tracks.filter((t) => t.youtubeUrl);
+          if (tracksWithYt.length > 0) {
+            setMassDownloadModalData(tracksWithYt);
+          }
+        }
         if (p.lrcFilesMap) setLrcFilesMap((prev) => ({ ...prev, ...p.lrcFilesMap }));
         if (p.playlists && p.playlists.length > 0) setPlaylists(p.playlists);
         if (p.likedSongIds) setLikedSongIds(p.likedSongIds);
@@ -693,6 +780,89 @@ export default function App() {
       setIsSyncingDrive(false);
       alert('Error al restaurar desde Google Drive');
     }
+  };
+
+  const handleOpenManualUrlModal = (song, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setManualUrlModalSong(song);
+    setManualUrlInput(song.youtubeUrl || '');
+  };
+
+  const handleSaveManualUrl = () => {
+    if (!manualUrlModalSong) return;
+    const url = manualUrlInput.trim();
+    setSongs((prev) =>
+      prev.map((s) =>
+        s.id === manualUrlModalSong.id ? { ...s, youtubeUrl: url || null } : s
+      )
+    );
+    setNotifications((prev) =>
+      prev.filter((n) => n.songId !== manualUrlModalSong.id)
+    );
+    setManualUrlModalSong(null);
+  };
+
+  const handleRemoveManualUrl = () => {
+    if (!manualUrlModalSong) return;
+    setSongs((prev) =>
+      prev.map((s) =>
+        s.id === manualUrlModalSong.id ? { ...s, youtubeUrl: null } : s
+      )
+    );
+    setManualUrlModalSong(null);
+  };
+
+  const handleStartMassDownload = () => {
+    if (!massDownloadModalData || massDownloadModalData.length === 0) return;
+
+    const newQueueItems = massDownloadModalData.map((track, idx) => ({
+      id: `mass-${Date.now()}-${idx}`,
+      videoId: extractYouTubeId(track.youtubeUrl) || `sim-${track.id}`,
+      url: track.youtubeUrl,
+      quality: selectedQuality,
+      includeLrc: true,
+      meta: {
+        title: track.title,
+        artist: track.artist,
+        album: track.album || 'YouTube Music',
+        year: track.addedAt?.split('-')[0] || new Date().getFullYear().toString()
+      },
+      thumbnail: track.cover || (isOnline ? getYouTubeThumbnail(track.youtubeUrl) : null),
+      progress: 0,
+      status: DOWNLOAD_STATUS.QUEUED,
+      addedAt: new Date()
+    }));
+
+    setDownloadQueue((prev) => [...prev, ...newQueueItems]);
+    const count = massDownloadModalData.length;
+    setMassDownloadModalData(null);
+
+    setTimeout(() => {
+      newQueueItems.forEach((item, index) => {
+        setTimeout(() => {
+          simulateDownloadProgress(item.id);
+        }, (index + 1) * 1500);
+      });
+    }, 600);
+
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        title: 'Descarga masiva en curso',
+        message: `Se han puesto ${count} canciones en cola para descargar sin interrumpir tu reproduccion.`,
+        type: 'info',
+        timestamp: 'Ahora'
+      },
+      ...prev
+    ]);
+  };
+
+  const handleDismissNotification = (id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const handleClearAllNotifications = () => {
+    setNotifications([]);
   };
 
   // Cargar imagen de fondo local desde el equipo
@@ -1453,7 +1623,19 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
             )}
 
             <div className="phone-status-bar">
-              <span>9:41</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>9:41</span>
+                <button
+                  className="phone-notif-btn"
+                  onClick={() => setShowNotificationsModal(true)}
+                  title="Bandeja de Notificaciones"
+                >
+                  <Bell size={12} />
+                  {notifications.length > 0 && (
+                    <span className="phone-notif-badge">{notifications.length}</span>
+                  )}
+                </button>
+              </div>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <Zap size={12} color="var(--phone-primary)" />
                 <span>5G</span>
@@ -1583,7 +1765,18 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                       className="phone-item-thumb"
                     />
                     <div className="phone-item-info">
-                      <div className="phone-item-title">{song.title}</div>
+                      <div className="phone-item-title-wrap">
+                        <span className="phone-item-title">{song.title}</span>
+                        <span
+                          className={`yt-url-indicator-dot ${song.youtubeUrl ? 'linked' : 'unlinked'}`}
+                          onClick={(e) => handleOpenManualUrlModal(song, e)}
+                          title={
+                            song.youtubeUrl
+                              ? `Enlace de YouTube vinculado (Puntico blanco): ${song.youtubeUrl}`
+                              : 'Sin enlace de YouTube (Puntico negro - Toca para asignar)'
+                          }
+                        />
+                      </div>
                       <div className="phone-item-subtitle">{song.artist}</div>
                     </div>
                     <span
@@ -1778,7 +1971,18 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                             className="phone-item-thumb"
                           />
                           <div className="phone-item-info">
-                            <div className="phone-item-title">{song.title}</div>
+                            <div className="phone-item-title-wrap">
+                              <span className="phone-item-title">{song.title}</span>
+                              <span
+                                className={`yt-url-indicator-dot ${song.youtubeUrl ? 'linked' : 'unlinked'}`}
+                                onClick={(e) => handleOpenManualUrlModal(song, e)}
+                                title={
+                                  song.youtubeUrl
+                                    ? `Enlace de YouTube vinculado (Puntico blanco): ${song.youtubeUrl}`
+                                    : 'Sin enlace de YouTube (Puntico negro - Toca para asignar)'
+                                }
+                              />
+                            </div>
                             <div className="phone-item-subtitle">
                               {song.artist} • {song.album}
                             </div>
@@ -2172,7 +2376,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                       color: 'var(--phone-text)'
                     }}
                   >
-                    Perfil de Sonido:
+                    Preset:
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <select
@@ -2196,12 +2400,18 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                             onClick={() => handleDeleteCustomPreset(cur.id)}
                             style={{
                               color: '#ef4444',
-                              padding: '4px',
-                              borderRadius: '6px'
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              padding: '5px',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
                             }}
                             title="Eliminar este preset"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={15} />
                           </button>
                         );
                       }
@@ -2726,6 +2936,65 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                         Copia automatica en Google Drive al realizar cambios
                       </span>
                     </div>
+                  </div>
+                </div>
+
+                {/* RASTREADOR DE ENLACES YOUTUBE EN SEGUNDO PLANO (FASE 3) */}
+                <div className="inapp-settings-section">
+                  <div className="inapp-settings-title">
+                    <Radio size={16} color="var(--phone-primary)" />
+                    <span>Rastreador de YouTube</span>
+                  </div>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--phone-text-muted)', marginBottom: '0.8rem' }}>
+                    Vincula automaticamente enlaces de YouTube a tus canciones offline mientras usas la app para recuperarlas en caso de cambio o perdida de dispositivo:
+                  </p>
+
+                  <div className="crawler-status-box">
+                    <div className="crawler-stat-item">
+                      <span className="crawler-stat-num" style={{ color: '#ffffff' }}>
+                        {songs.filter((s) => s.youtubeUrl).length}
+                      </span>
+                      <span className="crawler-stat-label">
+                        <span className="yt-url-indicator-dot linked" style={{ display: 'inline-block', marginRight: '4px' }} />
+                        Vinculadas
+                      </span>
+                    </div>
+                    <div className="crawler-stat-divider" />
+                    <div className="crawler-stat-item">
+                      <span className="crawler-stat-num" style={{ color: 'var(--phone-text-muted)' }}>
+                        {songs.filter((s) => !s.youtubeUrl).length}
+                      </span>
+                      <span className="crawler-stat-label">
+                        <span className="yt-url-indicator-dot unlinked" style={{ display: 'inline-block', marginRight: '4px' }} />
+                        Sin enlace
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    className="dl-toggle-row"
+                    style={{ marginTop: '0.6rem' }}
+                    onClick={() => setBgCrawlerEnabled((v) => !v)}
+                  >
+                    <div className={`dl-toggle-pill ${bgCrawlerEnabled ? 'on' : 'off'}`}>
+                      <div className="dl-toggle-knob" />
+                    </div>
+                    <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
+                      Busqueda automatica en segundo plano
+                    </span>
+                  </div>
+
+                  <div
+                    className="dl-toggle-row"
+                    style={{ marginTop: '0.5rem', opacity: bgCrawlerEnabled ? 1 : 0.5, pointerEvents: bgCrawlerEnabled ? 'auto' : 'none' }}
+                    onClick={() => setBgCrawlerHighPriority((v) => !v)}
+                  >
+                    <div className={`dl-toggle-pill ${bgCrawlerHighPriority ? 'on' : 'off'}`}>
+                      <div className="dl-toggle-knob" />
+                    </div>
+                    <span className="dl-toggle-label" style={{ fontSize: '0.72rem' }}>
+                      Modo Prioridad Alta (intervalo rapido)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -3609,6 +3878,265 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </button>
               <button className="btn-primary" onClick={handleCreatePlaylist}>
                 Crear Lista
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BANDEJA DE NOTIFICACIONES (FASE 3) */}
+      {showNotificationsModal && (
+        <div
+          className="lyrics-modal-backdrop"
+          onClick={() => setShowNotificationsModal(false)}
+        >
+          <div
+            className="lyrics-card phone-notif-modal"
+            style={{ maxWidth: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="notif-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bell size={18} color="var(--phone-primary)" />
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>
+                  Notificaciones
+                </h3>
+                {notifications.length > 0 && (
+                  <span className="notif-count-pill">{notifications.length}</span>
+                )}
+              </div>
+              <button
+                className="ctrl-btn"
+                onClick={() => setShowNotificationsModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="notif-modal-list">
+              {notifications.length === 0 ? (
+                <div className="notif-empty-state">
+                  <Bell size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    No hay notificaciones pendientes.
+                  </p>
+                </div>
+              ) : (
+                notifications.map((notif) => (
+                  <div key={notif.id} className={`notif-card-item ${notif.type || 'info'}`}>
+                    <div className="notif-card-header">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {notif.type === 'alert' ? (
+                          <AlertTriangle size={14} color="#f59e0b" />
+                        ) : (
+                          <Radio size={14} color="var(--phone-primary)" />
+                        )}
+                        <strong className="notif-item-title">{notif.title}</strong>
+                      </div>
+                      <span className="notif-item-time">{notif.timestamp}</span>
+                    </div>
+                    <p className="notif-item-body">{notif.message}</p>
+                    <div className="notif-item-actions">
+                      {notif.songId && (
+                        <button
+                          className="notif-action-btn primary"
+                          onClick={() => {
+                            const song = songs.find((s) => s.id === notif.songId);
+                            if (song) {
+                              setShowNotificationsModal(false);
+                              handleOpenManualUrlModal(song);
+                            }
+                          }}
+                        >
+                          <Link2 size={12} />
+                          <span>Asignar enlace</span>
+                        </button>
+                      )}
+                      <button
+                        className="notif-action-btn secondary"
+                        onClick={() => handleDismissNotification(notif.id)}
+                      >
+                        Descartar
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {notifications.length > 0 && (
+              <div className="notif-modal-footer">
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                  onClick={handleClearAllNotifications}
+                >
+                  Limpiar todas
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ENLACE MANUAL DE YOUTUBE (FASE 3) */}
+      {manualUrlModalSong && (
+        <div
+          className="lyrics-modal-backdrop"
+          onClick={() => setManualUrlModalSong(null)}
+        >
+          <div
+            className="lyrics-card"
+            style={{ maxWidth: '390px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Link size={18} color="var(--phone-primary)" />
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>
+                  Enlace de YouTube
+                </h3>
+              </div>
+              <button
+                className="ctrl-btn"
+                onClick={() => setManualUrlModalSong(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+                alignItems: 'center',
+                padding: '8px 10px',
+                borderRadius: '10px',
+                background: 'rgba(255,255,255,0.04)',
+                marginBottom: '1rem'
+              }}
+            >
+              <img
+                src={manualUrlModalSong.cover}
+                alt=""
+                style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }}
+              />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {manualUrlModalSong.title}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  {manualUrlModalSong.artist}
+                </div>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
+              Introduce o edita la URL de YouTube para esta cancion offline:
+            </p>
+
+            <input
+              type="text"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={manualUrlInput}
+              onChange={(e) => setManualUrlInput(e.target.value)}
+              style={{
+                width: '100%',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.14)',
+                borderRadius: '10px',
+                padding: '0.75rem 1rem',
+                color: 'white',
+                marginBottom: '1rem',
+                fontSize: '0.82rem'
+              }}
+            />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {manualUrlModalSong.youtubeUrl ? (
+                <button
+                  className="btn-secondary"
+                  style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)', fontSize: '0.76rem', padding: '7px 12px' }}
+                  onClick={handleRemoveManualUrl}
+                >
+                  <Trash2 size={13} />
+                  <span>Quitar enlace</span>
+                </button>
+              ) : (
+                <div />
+              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: '0.76rem', padding: '7px 12px' }}
+                  onClick={() => setManualUrlModalSong(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="btn-primary"
+                  style={{ fontSize: '0.76rem', padding: '7px 14px' }}
+                  onClick={handleSaveManualUrl}
+                >
+                  <Save size={13} />
+                  <span>Guardar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE RECUPERACION Y DESCARGA MASIVA (FASE 3) */}
+      {massDownloadModalData && (
+        <div
+          className="lyrics-modal-backdrop"
+          onClick={() => setMassDownloadModalData(null)}
+        >
+          <div
+            className="lyrics-card"
+            style={{ maxWidth: '400px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.8rem' }}>
+              <DownloadCloud size={22} color="var(--phone-primary)" />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>
+                Recuperacion de Musica
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', lineHeight: 1.5, color: '#e2e8f0', marginBottom: '0.8rem' }}>
+              Se han detectado <strong style={{ color: 'var(--phone-primary)' }}>{massDownloadModalData.length} canciones</strong> con enlace de YouTube verificado en la copia importada.
+            </p>
+
+            <div
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '10px',
+                padding: '10px 12px',
+                fontSize: '0.74rem',
+                color: 'var(--text-muted)',
+                lineHeight: 1.45,
+                marginBottom: '1.2rem'
+              }}
+            >
+              Las canciones se anadiran a la cola y se descargaran de forma persistente en segundo plano sin interrumpir la reproduccion. Si sales de la app o se pierde internet, la descarga se pausara de forma segura sin corromper datos.
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setMassDownloadModalData(null)}
+              >
+                Omitir
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleStartMassDownload}
+              >
+                <Download size={14} />
+                <span>Iniciar Descarga Masiva</span>
               </button>
             </div>
           </div>

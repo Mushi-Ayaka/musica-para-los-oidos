@@ -14,6 +14,7 @@ export const INITIAL_SONGS = [
     folder: "/Musica/Electronica/2026",
     plays: 1420,
     addedAt: "2026-10-15",
+    youtubeUrl: "https://youtu.be/dQw4w9WgXcQ",
     lyrics: [
       "Luces de neon se encienden al caer el sol...",
       "Un pulso electrico recorre la ciudad...",
@@ -56,6 +57,7 @@ export const INITIAL_SONGS = [
     folder: "/Musica/LoFi_Beats",
     plays: 2310,
     addedAt: "2026-10-20",
+    youtubeUrl: "https://youtu.be/fJ9rUzIMcZQ",
     lyrics: [
       "Taza caliente y la lluvia en el cristal...",
       "El vinilo gira suave, todo fluye natural...",
@@ -96,6 +98,7 @@ export const INITIAL_SONGS = [
     folder: "/Musica/Electronica/2026",
     plays: 1105,
     addedAt: "2026-10-25",
+    youtubeUrl: "https://youtu.be/kXYiU_JCYtU",
     lyrics: [
       "Despegando hacia constelaciones lejanas...",
       "Sintetizadores que abren nuevas ventanas.",
