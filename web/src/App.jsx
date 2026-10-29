@@ -45,7 +45,9 @@ import {
   AlertCircle,
   XCircle,
   RotateCcw,
-  Edit3
+  Edit3,
+  Filter,
+  ArrowDownAZ
 } from 'lucide-react';
 
 import {
@@ -113,6 +115,11 @@ export default function App() {
   const [selectedAlbumName, setSelectedAlbumName] = useState(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [showNewPlaylistModal, setShowNewPlaylistModal] = useState(false);
+
+  // FILTROS Y ORDENAMIENTO DE PISTAS (FASE 1.5)
+  const [trackSortOrder, setTrackSortOrder] = useState('az');
+  const [trackFolderFilter, setTrackFolderFilter] = useState('all');
+  const [selectedAlphaLetter, setSelectedAlphaLetter] = useState(null);
 
   // CONFIGURACION DEL ESTUDIO / SIMULADOR
   const [deviceScale, setDeviceScale] = useState(0.92);
@@ -255,6 +262,55 @@ export default function App() {
   const currentLrcLineIndex = useMemo(() => {
     return getCurrentLrcIndex(activeParsedLyrics, currentTime);
   }, [activeParsedLyrics, currentTime]);
+
+  // Lista de letras para barra de navegacion alfabetica
+  const alphabetLetters = useMemo(
+    () => ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'],
+    []
+  );
+
+  // Obtener lista unica de carpetas disponibles en la coleccion
+  const availableFolders = useMemo(() => {
+    const set = new Set();
+    songs.forEach((s) => {
+      if (s.folder) set.add(s.folder);
+    });
+    return Array.from(set);
+  }, [songs]);
+
+  // Pistas filtradas y ordenadas dinamicamente (Fase 1.5)
+  const filteredAndSortedTracks = useMemo(() => {
+    let list = [...songs];
+
+    // 1. Filtrar por carpeta seleccionada
+    if (trackFolderFilter !== 'all') {
+      list = list.filter((s) => s.folder === trackFolderFilter);
+    }
+
+    // 2. Ordenamiento (Alfabeticamente A-Z / Z-A / Mas nuevas / Mas antiguas)
+    if (trackSortOrder === 'az') {
+      list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    } else if (trackSortOrder === 'za') {
+      list.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+    } else if (trackSortOrder === 'newest') {
+      list.sort((a, b) => new Date(b.addedAt || '2020-01-01') - new Date(a.addedAt || '2020-01-01'));
+    } else if (trackSortOrder === 'oldest') {
+      list.sort((a, b) => new Date(a.addedAt || '2020-01-01') - new Date(b.addedAt || '2020-01-01'));
+    }
+
+    // 3. Filtrar por letra del alfabeto si hay una seleccionada
+    if (selectedAlphaLetter) {
+      list = list.filter((s) => {
+        const first = (s.title || '').trim()[0]?.toUpperCase();
+        if (selectedAlphaLetter === '#') {
+          return !/[A-Z]/i.test(first);
+        }
+        return first === selectedAlphaLetter;
+      });
+    }
+
+    return list;
+  }, [songs, trackFolderFilter, trackSortOrder, selectedAlphaLetter]);
 
   // Auto-importar o vincular archivo de letra
   const handleAutoImportLyric = () => {
@@ -438,6 +494,8 @@ export default function App() {
       cover: item.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=120&h=120&fit=crop',
       duration: 213,
       audioUrl: '',
+      folder: '/Musica/Descargas_YouTube',
+      addedAt: new Date().toISOString().split('T')[0],
       lyrics: []
     };
     setSongs((prev) => [newSong, ...prev]);
@@ -1258,7 +1316,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     >
                       MUSICA PARA LOS OIDOS
                     </span>
-                    <h2 className="phone-screen-title">Bienvenido</h2>
+                    <h2 className="phone-screen-title">Inicio</h2>
                   </div>
                   <div
                     style={{
@@ -1341,59 +1399,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                       {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                     </button>
                   </div>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '8px',
-                    overflowX: 'auto',
-                    marginBottom: '1.2rem',
-                    paddingBottom: '4px'
-                  }}
-                >
-                  <span
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '999px',
-                      background: 'rgba(255,255,255,0.08)',
-                      backdropFilter: 'blur(12px)',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      color: 'var(--phone-primary)',
-                      border: '1px solid var(--phone-primary)'
-                    }}
-                  >
-                    Energia
-                  </span>
-                  <span
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '999px',
-                      background: 'rgba(255,255,255,0.06)',
-                      backdropFilter: 'blur(12px)',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: 'var(--phone-text-muted)',
-                      border: '1px solid rgba(255,255,255,0.08)'
-                    }}
-                  >
-                    Lo-Fi
-                  </span>
-                  <span
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '999px',
-                      background: 'rgba(255,255,255,0.06)',
-                      backdropFilter: 'blur(12px)',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: 'var(--phone-text-muted)',
-                      border: '1px solid rgba(255,255,255,0.08)'
-                    }}
-                  >
-                    Meditacion
-                  </span>
                 </div>
 
                 <h4
@@ -1500,42 +1505,148 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
 
                 {libraryTab === 'tracks' && (
                   <div>
-                    {songs.map((song) => (
-                      <div
-                        key={song.id}
-                        className="phone-item-row"
-                        onClick={() => handleSelectSong(song, songs)}
-                      >
-                        <img
-                          src={song.cover}
-                          alt=""
-                          className="phone-item-thumb"
-                        />
-                        <div className="phone-item-info">
-                          <div className="phone-item-title">{song.title}</div>
-                          <div className="phone-item-subtitle">
-                            {song.artist} • {song.album}
+                    {/* Tarjeta de Filtros de Orden y Carpetas (Fase 1.5) */}
+                    <div className="lib-filters-card">
+                      <div className="lib-filters-row">
+                        {/* Selector de Orden */}
+                        <div className="lib-filter-box">
+                          <ArrowDownAZ size={13} className="lib-filter-icon" />
+                          <select
+                            className="lib-filter-select"
+                            value={trackSortOrder}
+                            onChange={(e) => {
+                              setTrackSortOrder(e.target.value);
+                              if (e.target.value !== 'az' && e.target.value !== 'za') {
+                                setSelectedAlphaLetter(null);
+                              }
+                            }}
+                          >
+                            <option value="az">A - Z (Alfabeticamente)</option>
+                            <option value="za">Z - A (Inverso)</option>
+                            <option value="newest">Mas nuevas primero</option>
+                            <option value="oldest">Mas antiguas primero</option>
+                            <option value="default">Orden predeterminado</option>
+                          </select>
+                        </div>
+
+                        {/* Selector de Carpeta */}
+                        <div className="lib-filter-box">
+                          <Folder size={13} className="lib-filter-icon" />
+                          <select
+                            className="lib-filter-select"
+                            value={trackFolderFilter}
+                            onChange={(e) => setTrackFolderFilter(e.target.value)}
+                          >
+                            <option value="all">Todas las carpetas</option>
+                            {availableFolders.map((f) => (
+                              <option key={f} value={f}>
+                                {f.replace('/Musica/', '')}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Barra de navegacion alfabetica (si el orden es alfabetico) */}
+                      {(trackSortOrder === 'az' || trackSortOrder === 'za') && (
+                        <div className="lib-alpha-wrap">
+                          <div className="lib-alpha-strip">
+                            <button
+                              type="button"
+                              className={`lib-alpha-chip ${selectedAlphaLetter === null ? 'active' : ''}`}
+                              onClick={() => setSelectedAlphaLetter(null)}
+                            >
+                              Todas
+                            </button>
+                            {alphabetLetters.map((letter) => (
+                              <button
+                                key={letter}
+                                type="button"
+                                className={`lib-alpha-chip ${selectedAlphaLetter === letter ? 'active' : ''}`}
+                                onClick={() =>
+                                  setSelectedAlphaLetter((cur) => (cur === letter ? null : letter))
+                                }
+                              >
+                                {letter}
+                              </button>
+                            ))}
                           </div>
                         </div>
-                        <button
-                          onClick={(e) => toggleLike(song.id, e)}
-                          style={{
-                            color: likedSongIds.includes(song.id)
-                              ? 'var(--phone-primary)'
-                              : 'var(--phone-text-muted)'
-                          }}
-                        >
-                          <Heart
-                            size={16}
-                            fill={
-                              likedSongIds.includes(song.id)
-                                ? 'currentColor'
-                                : 'none'
-                            }
-                          />
-                        </button>
+                      )}
+
+                      {/* Indicador de filtro activo */}
+                      {(selectedAlphaLetter || trackFolderFilter !== 'all') && (
+                        <div className="lib-active-filter-bar">
+                          <span>
+                            {selectedAlphaLetter && `Letra: "${selectedAlphaLetter}"`}
+                            {selectedAlphaLetter && trackFolderFilter !== 'all' && ' • '}
+                            {trackFolderFilter !== 'all' && `Carpeta: ${trackFolderFilter.replace('/Musica/', '')}`}
+                            {` (${filteredAndSortedTracks.length} pistas)`}
+                          </span>
+                          <button
+                            type="button"
+                            className="lib-filter-reset-btn"
+                            onClick={() => {
+                              setSelectedAlphaLetter(null);
+                              setTrackFolderFilter('all');
+                            }}
+                          >
+                            Limpiar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Lista de pistas filtradas y ordenadas */}
+                    {filteredAndSortedTracks.length === 0 ? (
+                      <div className="dl-empty-state" style={{ padding: '2rem 1rem' }}>
+                        <Music size={28} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
+                        <div style={{ fontSize: '0.8rem', color: 'var(--phone-text-muted)' }}>
+                          No hay pistas que coincidan con los filtros aplicados
+                        </div>
                       </div>
-                    ))}
+                    ) : (
+                      filteredAndSortedTracks.map((song) => (
+                        <div
+                          key={song.id}
+                          className="phone-item-row"
+                          onClick={() => handleSelectSong(song, filteredAndSortedTracks)}
+                        >
+                          <img
+                            src={song.cover}
+                            alt=""
+                            className="phone-item-thumb"
+                          />
+                          <div className="phone-item-info">
+                            <div className="phone-item-title">{song.title}</div>
+                            <div className="phone-item-subtitle">
+                              {song.artist} • {song.album}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => toggleLike(song.id, e)}
+                            style={{
+                              color: likedSongIds.includes(song.id)
+                                ? 'var(--phone-primary)'
+                                : 'var(--phone-text-muted)',
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '4px'
+                            }}
+                          >
+                            <Heart
+                              size={16}
+                              fill={
+                                likedSongIds.includes(song.id)
+                                  ? 'currentColor'
+                                  : 'none'
+                              }
+                            />
+                          </button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 )}
 
@@ -2388,10 +2499,19 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                     <h2 className="phone-screen-title">Descargar Musica</h2>
                   </div>
                   <div
-                    className={`dl-connectivity-badge ${isOnline ? 'online' : 'offline'}`}
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.08)',
+                      backdropFilter: 'blur(12px)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid rgba(255,255,255,0.1)'
+                    }}
                   >
-                    {isOnline ? <Wifi size={11} /> : <WifiOff size={11} />}
-                    <span>{isOnline ? 'Conectado' : 'Sin Internet'}</span>
+                    <Download size={16} color="var(--phone-primary)" />
                   </div>
                 </div>
 
