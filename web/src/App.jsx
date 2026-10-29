@@ -34,7 +34,8 @@ import {
   GripVertical,
   FileText,
   Gauge,
-  ScanLine
+  ScanLine,
+  Disc3
 } from 'lucide-react';
 
 import {
@@ -50,11 +51,16 @@ import {
   OUTPUT_AUDIO_PROFILES
 } from './utils/audioEqualizer';
 import { synth } from './utils/audioSynthesizer';
-import { parseLRC, getCurrentLrcIndex, MOCK_DEVICE_LRC_FILES } from './utils/lrcParser';
+import {
+  parseLRC,
+  getCurrentLrcIndex,
+  findMatchingLyric,
+  MOCK_DEVICE_LRC_FILES
+} from './utils/lrcParser';
 import './App.css';
 
 export default function App() {
-  // LIBRERIA PRINCIPAL (PERMANECE INALTERADA)
+  // LIBRERIA PRINCIPAL
   const [songs, setSongs] = useState(INITIAL_SONGS);
   const [playlists, setPlaylists] = useState(INITIAL_PLAYLISTS);
   const [folders, setFolders] = useState(FOLDERS);
@@ -64,21 +70,23 @@ export default function App() {
   const [duration, setDuration] = useState(INITIAL_SONGS[0].duration);
   const [likedSongIds, setLikedSongIds] = useState([1, 3]);
 
-  // COLA / PLAYLIST EN REPRODUCCION (MODIFICABLE SIN AFECTAR EL ALBUM O LIBRERIA)
+  // COLA / PLAYLIST EN REPRODUCCION
   const [activeQueue, setActiveQueue] = useState([...INITIAL_SONGS]);
   const [draggedQueueIndex, setDraggedQueueIndex] = useState(null);
   const [showAddTrackModal, setShowAddTrackModal] = useState(false);
 
-  // SISTEMA DE LETRAS LRC SINCRONIZADAS (.LRC)
+  // DESLIZAMIENTO SUPERIOR DEL REPRODUCTOR (0: PORTADA | 1: LIRICA)
+  const [playerTopTab, setPlayerTopTab] = useState(0);
+  const [touchStartX, setTouchStartX] = useState(null);
+
+  // SISTEMA DE LETRAS LRC / IRC / ICR
   const [lrcFilesMap, setLrcFilesMap] = useState(MOCK_DEVICE_LRC_FILES);
-  const [showLrcModal, setShowLrcModal] = useState(false);
-  const [customLrcText, setCustomLrcText] = useState('');
+  const fileInputRef = useRef(null);
 
   // NAVEGACION DENTRO DEL TELEFONO
-  // 'home' | 'library' | 'equalizer' | 'settings'
   const [phoneScreen, setPhoneScreen] = useState('home');
   const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
-  const [libraryTab, setLibraryTab] = useState('tracks'); // 'tracks' | 'playlists' | 'albums' | 'folders'
+  const [libraryTab, setLibraryTab] = useState('tracks');
   const [activePlaylistId, setActivePlaylistId] = useState(null);
   const [selectedAlbumName, setSelectedAlbumName] = useState(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -87,7 +95,7 @@ export default function App() {
   // CONFIGURACION DEL ESTUDIO / SIMULADOR
   const [deviceScale, setDeviceScale] = useState(0.92);
   const [isFlatDevice, setIsFlatDevice] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState('themes'); // 'themes' | 'player-custom' | 'wallpaper' | 'flutter-code'
+  const [sidebarTab, setSidebarTab] = useState('themes');
 
   // PERSONALIZACION DE LA INTERFAZ
   const [activePreset, setActivePreset] = useState(THEME_PRESETS[0].id);
@@ -95,10 +103,10 @@ export default function App() {
   const [customStylePresets, setCustomStylePresets] = useState([]);
   const [newStylePresetName, setNewStylePresetName] = useState('');
 
-  // VELOCIDAD DE REPRODUCCION EN AJUSTES
+  // VELOCIDAD DE REPRODUCCION
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
 
-  // ECUALIZADOR Y SONIDO AVANZADO
+  // ECUALIZADOR Y SONIDO
   const [eqPresets, setEqPresets] = useState(DEFAULT_EQ_PRESETS);
   const [eqEnabled, setEqEnabled] = useState(true);
   const [selectedEqPresetId, setSelectedEqPresetId] = useState(DEFAULT_EQ_PRESETS[0].id);
@@ -107,7 +115,7 @@ export default function App() {
   const [virtualizer, setVirtualizer] = useState(0);
   const [customPresetName, setCustomPresetName] = useState('');
 
-  // VOLUMEN++ (HASTA 200%) Y PERFIL DE SALIDA
+  // VOLUMEN++ Y PERFIL DE SALIDA
   const [volumePercent, setVolumePercent] = useState(100);
   const [isMuted, setIsMuted] = useState(false);
   const [outputProfile, setOutputProfile] = useState('studio_monitor');
@@ -152,14 +160,13 @@ export default function App() {
     audioEngine.setOutputProfile(outputProfile);
   }, [outputProfile]);
 
-  // Parsear letras LRC de la cancion actual si existe archivo .lrc asociado
+  // Parsear letras sincronizadas admitiendo .lrc, .irc y .icr
   const activeParsedLyrics = useMemo(() => {
-    const fileName = `${currentSong.title}.lrc`;
-    const lrcRaw = lrcFilesMap[fileName];
-    if (lrcRaw) {
-      return parseLRC(lrcRaw);
+    const match = findMatchingLyric(currentSong.title, lrcFilesMap);
+    if (match && match.content) {
+      return parseLRC(match.content);
     }
-    // Fallback: usar letras en texto plano sin marcas de tiempo
+    // Fallback: usar lineas de texto plano
     if (currentSong.lyrics && currentSong.lyrics.length > 0) {
       const step = (duration || 180) / currentSong.lyrics.length;
       return currentSong.lyrics.map((line, i) => ({
@@ -174,6 +181,62 @@ export default function App() {
   const currentLrcLineIndex = useMemo(() => {
     return getCurrentLrcIndex(activeParsedLyrics, currentTime);
   }, [activeParsedLyrics, currentTime]);
+
+  // Buscar e importar archivo de letra automaticamente por coincidencia de nombre
+  const handleAutoImportLyric = () => {
+    const match = findMatchingLyric(currentSong.title, lrcFilesMap);
+    if (match) {
+      alert(`Archivo de letra vinculado automaticamente: ${match.fileName}`);
+    } else {
+      // Si no existe todavia, asociar y crear archivo sincronizado en el almacenamiento
+      const newFileName = `${currentSong.title}.lrc`;
+      const generatedLrc = `[00:01.00] Letra sincronizada para ${currentSong.title}\n[00:07.00] Musica para los oidos\n[00:15.00] Frecuencia y ritmo en perfecta sintonia\n[00:25.00] Melodia que trasciende en el tiempo`;
+      setLrcFilesMap((prev) => ({
+        ...prev,
+        [newFileName]: generatedLrc
+      }));
+      alert(`Se encontro e indexo el archivo: ${newFileName}`);
+    }
+  };
+
+  // Importar archivo desde el almacenamiento local del equipo
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result;
+      if (typeof content === 'string') {
+        setLrcFilesMap((prev) => ({
+          ...prev,
+          [file.name]: content,
+          [`${currentSong.title}.lrc`]: content
+        }));
+        alert(`Letra cargada desde archivo: ${file.name}`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Manejador de deslizamiento (Swipe) con el dedo o raton
+  const handleSwipeStart = (clientX) => {
+    setTouchStartX(clientX);
+  };
+
+  const handleSwipeEnd = (clientX) => {
+    if (touchStartX === null) return;
+    const diff = touchStartX - clientX;
+    // Si desliza hacia la izquierda (mas de 40px), pasar a la lirica
+    if (diff > 40) {
+      setPlayerTopTab(1);
+    }
+    // Si desliza hacia la derecha (mas de 40px), regresar a la portada
+    else if (diff < -40) {
+      setPlayerTopTab(0);
+    }
+    setTouchStartX(null);
+  };
 
   // Aplicar tema completo
   const applyPreset = (preset) => {
@@ -192,7 +255,7 @@ export default function App() {
     }));
   };
 
-  // Guardar preset de estilo de colores e imagen personalizado
+  // Guardar preset de estilo
   const handleSaveStylePreset = () => {
     const name = newStylePresetName.trim();
     if (!name) return;
@@ -277,12 +340,12 @@ export default function App() {
     );
   };
 
-  // ARRASTRAR Y REORDENAR LA LISTA EN REPRODUCCION (DRAG AND DROP)
+  // Arrastrar y reordenar la lista (Drag and Drop)
   const handleDragStart = (index) => {
     setDraggedQueueIndex(index);
   };
 
-  const handleDragOver = (e, index) => {
+  const handleDragOver = (e) => {
     e.preventDefault();
   };
 
@@ -320,34 +383,7 @@ export default function App() {
     setShowAddTrackModal(false);
   };
 
-  // BUSCAR O ASOCIAR ARCHIVO LRC POR NOMBRE DE PISTA
-  const handleScanLrcFiles = () => {
-    const matchingKey = `${currentSong.title}.lrc`;
-    if (lrcFilesMap[matchingKey]) {
-      alert(`Archivo sincronizado encontrado: ${matchingKey}`);
-    } else {
-      // Simular creacion o descubrimiento automatico
-      setLrcFilesMap({
-        ...lrcFilesMap,
-        [matchingKey]: `[00:02.00] Letra sincronizada para ${currentSong.title}\n[00:08.00] Musica para los oidos\n[00:18.00] Frecuencias y compas en armonia`
-      });
-      alert(`Se ha indexado el archivo .lrc para: ${currentSong.title}`);
-    }
-  };
-
-  // Guardar archivo LRC personalizado
-  const handleSaveCustomLrc = () => {
-    if (!customLrcText.trim()) return;
-    const matchingKey = `${currentSong.title}.lrc`;
-    setLrcFilesMap({
-      ...lrcFilesMap,
-      [matchingKey]: customLrcText.trim()
-    });
-    alert(`Letra .lrc guardada para: ${currentSong.title}`);
-    setCustomLrcText('');
-  };
-
-  // Seleccionar preset de ecualizador
+  // Guardar y eliminar presets de ecualizador
   const handleSelectEqPreset = (presetId) => {
     setSelectedEqPresetId(presetId);
     const found = eqPresets.find((p) => p.id === presetId);
@@ -358,7 +394,6 @@ export default function App() {
     }
   };
 
-  // Guardar preset de ecualizador
   const handleSaveCustomPreset = () => {
     const name = customPresetName.trim();
     if (!name) return;
@@ -390,7 +425,7 @@ export default function App() {
     setSelectedEqPresetId('custom-active');
   };
 
-  // Crear Lista de reproduccion en libreria
+  // Crear Lista de reproduccion
   const handleCreatePlaylist = () => {
     const name = newPlaylistName.trim();
     if (!name) return;
@@ -413,7 +448,7 @@ export default function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Codigo generado para Flutter ThemeData
+  // Codigo generado para Flutter
   const generatedFlutterCode = `// Codigo de tema simetrico para Flutter (ThemeData)
 // Proyecto: Musica para los Oidos
 
@@ -442,7 +477,6 @@ final appTheme = ThemeData(
   fontFamily: '${themeVars.fontFamily.includes('Outfit') ? 'Outfit' : 'PlusJakartaSans'}',
 );
 
-// Configuracion de colores del reproductor
 const playerBackgroundColor = Color(0xFF${(themeVars.playerBg || themeVars.bgSurface).replace('#', '')});
 const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accentPrimary).replace('#', '')});
 `;
@@ -474,6 +508,15 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
         onEnded={handleNext}
       />
 
+      {/* Input invisible para importar archivos .lrc / .irc / .icr */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".lrc,.irc,.icr,.txt"
+        onChange={handleFileUpload}
+        style={{ display: 'none' }}
+      />
+
       {/* PANEL LATERAL DE CONFIGURACION */}
       <aside className="studio-sidebar">
         <div className="studio-sidebar-header">
@@ -488,7 +531,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
           </div>
         </div>
 
-        {/* Pestanas del panel */}
         <div className="studio-nav-tabs">
           <button
             className={`studio-tab-btn ${sidebarTab === 'themes' ? 'active' : ''}`}
@@ -521,10 +563,8 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
         </div>
 
         <div className="studio-panel-body">
-          {/* PESTANA 1: TEMA GLOBAL */}
           {sidebarTab === 'themes' && (
             <>
-              {/* Presets Guardados por el Usuario */}
               {customStylePresets.length > 0 && (
                 <div>
                   <div className="studio-section-title">
@@ -677,7 +717,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
             </>
           )}
 
-          {/* PESTANA 2: PERSONALIZACION ESPECIFICA DEL REPRODUCTOR */}
           {sidebarTab === 'player-custom' && (
             <>
               <div>
@@ -731,35 +770,31 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
             </>
           )}
 
-          {/* PESTANA 3: FONDO CON IMAGEN */}
           {sidebarTab === 'wallpaper' && (
-            <>
-              <div>
-                <div className="studio-section-title">
-                  <span>Imagenes de Fondo</span>
-                </div>
-                <div className="wallpaper-grid">
-                  {WALLPAPER_PRESETS.map((wp) => (
-                    <div
-                      key={wp.id}
-                      className={`wallpaper-thumb-card ${themeVars.bgImage === wp.url ? 'active' : ''}`}
-                      style={{
-                        backgroundImage: wp.url ? `url(${wp.url})` : 'none',
-                        backgroundColor: '#121020'
-                      }}
-                      onClick={() =>
-                        setThemeVars((prev) => ({ ...prev, bgImage: wp.url }))
-                      }
-                    >
-                      <span className="wallpaper-thumb-name">{wp.name}</span>
-                    </div>
-                  ))}
-                </div>
+            <div>
+              <div className="studio-section-title">
+                <span>Imagenes de Fondo</span>
               </div>
-            </>
+              <div className="wallpaper-grid">
+                {WALLPAPER_PRESETS.map((wp) => (
+                  <div
+                    key={wp.id}
+                    className={`wallpaper-thumb-card ${themeVars.bgImage === wp.url ? 'active' : ''}`}
+                    style={{
+                      backgroundImage: wp.url ? `url(${wp.url})` : 'none',
+                      backgroundColor: '#121020'
+                    }}
+                    onClick={() =>
+                      setThemeVars((prev) => ({ ...prev, bgImage: wp.url }))
+                    }
+                  >
+                    <span className="wallpaper-thumb-name">{wp.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
-          {/* PESTANA 4: CODIGO FLUTTER */}
           {sidebarTab === 'flutter-code' && (
             <div>
               <div className="studio-section-title">
@@ -851,7 +886,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
           <div
             className={`mobile-phone-frame ${isFlatDevice ? 'flat-mode' : ''}`}
           >
-            {/* Capa de imagen de fondo configurable */}
             {themeVars.bgImage && (
               <>
                 <div
@@ -868,7 +902,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </>
             )}
 
-            {/* Dynamic Island */}
             {!isFlatDevice && (
               <div className="phone-dynamic-island">
                 <div className="island-camera" />
@@ -881,7 +914,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </div>
             )}
 
-            {/* Barra de estado */}
             <div className="phone-status-bar">
               <span>9:41</span>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -924,7 +956,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* Tarjeta destacada simetrica */}
                 <div
                   style={{
                     background: 'var(--phone-surface)',
@@ -990,7 +1021,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* Accesos rapidos de estado de animo */}
                 <div
                   style={{
                     display: 'flex',
@@ -1039,7 +1069,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </span>
                 </div>
 
-                {/* Lista reciente simetrica */}
                 <h4
                   style={{
                     fontSize: '0.85rem',
@@ -1078,10 +1107,9 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </div>
             )}
 
-            {/* PANTALLA 2: LIBRERIA (CON CORRECCION DE TABS STICKY) */}
+            {/* PANTALLA 2: LIBRERIA (CABECERA Y PESTANAS STICKY) */}
             {phoneScreen === 'library' && (
               <div className="phone-viewport">
-                {/* Cabecera Fija */}
                 <div className="phone-screen-header">
                   <h2 className="phone-screen-title">Tu Libreria</h2>
                   <button
@@ -1102,7 +1130,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </button>
                 </div>
 
-                {/* Pestanas Sticky que nunca se encogen */}
                 <div className="library-subtabs">
                   <button
                     className={`lib-subtab-pill ${libraryTab === 'tracks' ? 'active' : ''}`}
@@ -1144,7 +1171,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </button>
                 </div>
 
-                {/* CONTENIDO PISTAS */}
                 {libraryTab === 'tracks' && (
                   <div>
                     {songs.map((song) => (
@@ -1186,7 +1212,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 )}
 
-                {/* CONTENIDO LISTAS (PLAYLISTS) */}
                 {libraryTab === 'playlists' && (
                   <div>
                     {activePlaylistId ? (
@@ -1304,7 +1329,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 )}
 
-                {/* CONTENIDO ALBUMES CON DETALLE SIMETRICO */}
                 {libraryTab === 'albums' && (
                   <div>
                     {selectedAlbumName ? (
@@ -1429,7 +1453,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 )}
 
-                {/* CONTENIDO CARPETAS */}
                 {libraryTab === 'folders' && (
                   <div>
                     <div
@@ -1473,7 +1496,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </div>
             )}
 
-            {/* PANTALLA 3: ECUALIZADOR CON VOLUMEN++ Y GESTION DE PRESETS */}
+            {/* PANTALLA 3: ECUALIZADOR CON VOLUMEN++ */}
             {phoneScreen === 'equalizer' && (
               <div className="phone-viewport eq-screen-wrap">
                 <div className="phone-screen-header">
@@ -1505,7 +1528,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </button>
                 </div>
 
-                {/* VOLUMEN++ HASTA 200% */}
                 <div className="vol-boost-card">
                   <div className="vol-boost-header">
                     <span>Volumen y Ganancia Preamp (Volumen++)</span>
@@ -1537,7 +1559,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* SELECTOR DE PRESETS CON BOTON DE ELIMINAR */}
                 <div className="eq-toggle-card">
                   <span
                     style={{
@@ -1584,7 +1605,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* GUARDAR PRESET ACTUAL */}
                 <div className="eq-preset-manager-row">
                   <input
                     type="text"
@@ -1602,7 +1622,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </button>
                 </div>
 
-                {/* 10 FADERS VERTICALES */}
                 <div className="eq-faders-container">
                   {audioEngine.bandFrequencies.map((freq, idx) => (
                     <div key={freq} className="eq-fader-column">
@@ -1625,7 +1644,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   ))}
                 </div>
 
-                {/* BASS BOOST Y VIRTUALIZADOR 3D */}
                 <div className="eq-dials-row">
                   <div className="eq-dial-card">
                     <span
@@ -1679,7 +1697,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* AJUSTES DE SALIDA DE AUDIO */}
                 <div style={{ marginTop: '0.5rem' }}>
                   <h4
                     style={{
@@ -1750,15 +1767,12 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* 2. GUARDAR PRESET DE ESTILO (COLORES E IMAGEN) */}
+                {/* 2. GUARDAR PRESET DE ESTILO */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <Save size={16} color="var(--phone-primary)" />
                     <span>Guardar Tu Preset de Estilo</span>
                   </div>
-                  <p style={{ fontSize: '0.74rem', color: 'var(--phone-text-muted)', marginBottom: '0.6rem' }}>
-                    Guarda la combinacion exacta de colores, imagen de fondo y curvatura:
-                  </p>
                   <div className="save-style-preset-row">
                     <input
                       type="text"
@@ -1802,7 +1816,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   )}
                 </div>
 
-                {/* 3. TEMAS VISUALES PREDEFINIDOS */}
+                {/* 3. TEMAS PREDEFINIDOS */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <Palette size={16} color="var(--phone-primary)" />
@@ -1926,98 +1940,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                   </div>
                 </div>
 
-                {/* 6. IMAGEN DE FONDO */}
-                <div className="inapp-settings-section">
-                  <div className="inapp-settings-title">
-                    <ImageIcon size={16} color="var(--phone-primary)" />
-                    <span>Imagen de Fondo</span>
-                  </div>
-                  <div className="wallpaper-grid">
-                    {WALLPAPER_PRESETS.map((wp) => (
-                      <div
-                        key={wp.id}
-                        className={`wallpaper-thumb-card ${themeVars.bgImage === wp.url ? 'active' : ''}`}
-                        style={{
-                          backgroundImage: wp.url ? `url(${wp.url})` : 'none',
-                          backgroundColor: '#161426'
-                        }}
-                        onClick={() =>
-                          setThemeVars((prev) => ({ ...prev, bgImage: wp.url }))
-                        }
-                      >
-                        <span className="wallpaper-thumb-name">{wp.name}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="slider-control-group" style={{ marginTop: '0.8rem' }}>
-                    <div className="slider-label-row">
-                      <span>Desenfoque (Blur)</span>
-                      <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-                        {themeVars.bgBlur || 16}px
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="40"
-                      value={themeVars.bgBlur || 16}
-                      onChange={(e) =>
-                        setThemeVars((prev) => ({
-                          ...prev,
-                          bgBlur: parseInt(e.target.value)
-                        }))
-                      }
-                      className="range-input"
-                    />
-                  </div>
-                </div>
-
-                {/* 7. ARCHIVOS DE LETRAS LRC (.LRC) */}
-                <div className="inapp-settings-section">
-                  <div className="inapp-settings-title">
-                    <ScanLine size={16} color="var(--phone-primary)" />
-                    <span>Archivos de Letras (.lrc)</span>
-                  </div>
-                  <p style={{ fontSize: '0.74rem', color: 'var(--phone-text-muted)', marginBottom: '0.8rem' }}>
-                    Buscar en el almacenamiento del dispositivo un archivo .lrc que coincida con el nombre de la cancion:
-                  </p>
-                  <button
-                    className="btn-export"
-                    style={{ marginBottom: '0.8rem' }}
-                    onClick={handleScanLrcFiles}
-                  >
-                    <ScanLine size={16} />
-                    <span>Escanear .lrc para "{currentSong.title}"</span>
-                  </button>
-
-                  <textarea
-                    placeholder="O pega aqui contenido .lrc [mm:ss.xx]..."
-                    value={customLrcText}
-                    onChange={(e) => setCustomLrcText(e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '70px',
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px',
-                      color: 'white',
-                      padding: '8px',
-                      fontSize: '0.72rem',
-                      fontFamily: 'monospace',
-                      marginBottom: '0.5rem'
-                    }}
-                  />
-                  <button
-                    className="btn-secondary"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                    onClick={handleSaveCustomLrc}
-                  >
-                    Guardar Letra .lrc
-                  </button>
-                </div>
-
-                {/* 8. CODIGO FLUTTER */}
+                {/* 6. CODIGO FLUTTER */}
                 <div className="inapp-settings-section">
                   <div className="inapp-settings-title">
                     <FileCode size={16} color="var(--phone-primary)" />
@@ -2071,10 +1994,10 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </button>
             </div>
 
-            {/* REPRODUCTOR A PANTALLA COMPLETA: CARATULA ARRIBA + PLAYLIST ARRASTRABLE ABAJO */}
+            {/* REPRODUCTOR A PANTALLA COMPLETA */}
             {isPlayerModalOpen && (
               <div className="phone-player-modal">
-                {/* Cabecera superior del reproductor */}
+                {/* Cabecera superior */}
                 <div className="phone-modal-nav">
                   <button
                     onClick={() => setIsPlayerModalOpen(false)}
@@ -2085,106 +2008,166 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
 
                   <span
                     style={{
-                      fontSize: '0.75rem',
+                      fontSize: '0.74rem',
                       fontWeight: 800,
                       color: 'var(--phone-text-muted)',
                       letterSpacing: '0.04em'
                     }}
                   >
-                    REPRODUCIENDO AHORA
+                    {playerTopTab === 0 ? 'REPRODUCIENDO AHORA' : 'LIRICA SINCRONIZADA'}
                   </span>
 
                   <button
-                    onClick={() => setShowLrcModal(true)}
-                    style={{ color: 'var(--phone-player-accent)' }}
-                    title="Ver letras sincronizadas .lrc"
+                    onClick={(e) => toggleLike(currentSong.id, e)}
+                    style={{
+                      color: likedSongIds.includes(currentSong.id)
+                        ? 'var(--phone-player-accent)'
+                        : 'var(--phone-text-muted)'
+                    }}
                   >
-                    <FileText size={20} />
+                    <Heart
+                      size={18}
+                      fill={likedSongIds.includes(currentSong.id) ? 'currentColor' : 'none'}
+                    />
                   </button>
                 </div>
 
-                {/* MITAD SUPERIOR: Caratula grande, informacion y controles */}
-                <div className="player-top-section">
-                  <img
-                    src={currentSong.cover}
-                    alt=""
-                    className="player-big-cover"
-                  />
+                {/* MITAD SUPERIOR DESLIZABLE: PORTADA <-> LIRICA (.LRC / .ICR / .IRC) */}
+                <div
+                  className="player-top-slider-wrapper"
+                  onTouchStart={(e) => handleSwipeStart(e.touches[0].clientX)}
+                  onTouchEnd={(e) => handleSwipeEnd(e.changedTouches[0].clientX)}
+                  onMouseDown={(e) => handleSwipeStart(e.clientX)}
+                  onMouseUp={(e) => handleSwipeEnd(e.clientX)}
+                >
+                  <div
+                    className="player-top-slider-track"
+                    style={{
+                      transform: `translateX(${playerTopTab === 0 ? '0%' : '-50%'})`
+                    }}
+                  >
+                    {/* SLIDE 1: PORTADA Y CONTROLES */}
+                    <div className="player-slide-item">
+                      <img
+                        src={currentSong.cover}
+                        alt=""
+                        className="player-big-cover"
+                      />
 
-                  <div className="player-track-info-header">
-                    <div className="player-main-title">{currentSong.title}</div>
-                    <div className="player-main-artist">
-                      {currentSong.artist} • {currentSong.album}
+                      <div className="player-track-info-header">
+                        <div className="player-main-title">{currentSong.title}</div>
+                        <div className="player-main-artist">
+                          {currentSong.artist} • {currentSong.album}
+                        </div>
+                      </div>
+
+                      {/* Barra de progreso */}
+                      <div className="player-progress-wrap">
+                        <div
+                          className="player-progress-bar"
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const ratio = (e.clientX - rect.left) / rect.width;
+                            if (audioRef.current) {
+                              audioRef.current.currentTime = ratio * duration;
+                            }
+                          }}
+                        >
+                          <div
+                            className="player-progress-fill"
+                            style={{
+                              width: `${((currentTime / (duration || 1)) * 100).toFixed(1)}%`
+                            }}
+                          />
+                        </div>
+                        <div className="player-times-row">
+                          <span>{formatTime(currentTime)}</span>
+                          <span>{formatTime(duration)}</span>
+                        </div>
+                      </div>
+
+                      {/* Controles principales */}
+                      <div className="player-controls-compact">
+                        <button
+                          onClick={() => {
+                            setPhoneScreen('equalizer');
+                            setIsPlayerModalOpen(false);
+                          }}
+                          style={{ color: 'var(--phone-text-muted)' }}
+                          title="Ecualizador"
+                        >
+                          <Sliders size={18} />
+                        </button>
+                        <button onClick={handlePrev} style={{ color: 'var(--phone-text)' }}>
+                          <SkipBack size={24} />
+                        </button>
+                        <button onClick={togglePlay} className="play-circle-btn">
+                          {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+                        </button>
+                        <button onClick={handleNext} style={{ color: 'var(--phone-text)' }}>
+                          <SkipForward size={24} />
+                        </button>
+                        <button
+                          onClick={() => setPlayerTopTab(1)}
+                          style={{ color: 'var(--phone-player-accent)' }}
+                          title="Deslizar a la lirica"
+                        >
+                          <FileText size={18} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* SLIDE 2: LIRICA SINCRONIZADA CON LUPITA FLOTANTE */}
+                    <div className="player-slide-lyrics-wrap">
+                      <div className="lyrics-slide-scroll">
+                        {activeParsedLyrics.length > 0 ? (
+                          activeParsedLyrics.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className={`lyrics-slide-line ${idx === currentLrcLineIndex ? 'active' : ''}`}
+                              onClick={() => {
+                                if (audioRef.current) {
+                                  audioRef.current.currentTime = item.time;
+                                }
+                              }}
+                            >
+                              {item.text}
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ color: 'var(--phone-text-muted)', fontSize: '0.8rem', marginTop: '2rem' }}>
+                            Desliza o presiona la lupita para buscar el archivo .lrc / .icr / .irc
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Lupita abajo a la derecha para auto-importar archivo .lrc / .irc / .icr */}
+                      <button
+                        className="lyrics-search-fab"
+                        onClick={handleAutoImportLyric}
+                        title="Buscar e importar archivo de letra automaticamente"
+                      >
+                        <Search size={18} />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Barra de progreso */}
-                  <div className="player-progress-wrap">
+                  {/* Indicador de deslizamiento */}
+                  <div className="slide-indicator-pills">
                     <div
-                      className="player-progress-bar"
-                      onClick={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const ratio = (e.clientX - rect.left) / rect.width;
-                        if (audioRef.current) {
-                          audioRef.current.currentTime = ratio * duration;
-                        }
-                      }}
-                    >
-                      <div
-                        className="player-progress-fill"
-                        style={{
-                          width: `${((currentTime / (duration || 1)) * 100).toFixed(1)}%`
-                        }}
-                      />
-                    </div>
-                    <div className="player-times-row">
-                      <span>{formatTime(currentTime)}</span>
-                      <span>{formatTime(duration)}</span>
-                    </div>
-                  </div>
-
-                  {/* Controles de reproduccion compactos */}
-                  <div className="player-controls-compact">
-                    <button
-                      onClick={() => {
-                        setPhoneScreen('equalizer');
-                        setIsPlayerModalOpen(false);
-                      }}
-                      style={{ color: 'var(--phone-text-muted)' }}
-                      title="Ecualizador"
-                    >
-                      <Sliders size={18} />
-                    </button>
-                    <button onClick={handlePrev} style={{ color: 'var(--phone-text)' }}>
-                      <SkipBack size={24} />
-                    </button>
-                    <button onClick={togglePlay} className="play-circle-btn">
-                      {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-                    </button>
-                    <button onClick={handleNext} style={{ color: 'var(--phone-text)' }}>
-                      <SkipForward size={24} />
-                    </button>
-                    <button
-                      onClick={(e) => toggleLike(currentSong.id, e)}
-                      style={{
-                        color: likedSongIds.includes(currentSong.id)
-                          ? 'var(--phone-player-accent)'
-                          : 'var(--phone-text-muted)'
-                      }}
-                    >
-                      <Heart
-                        size={18}
-                        fill={
-                          likedSongIds.includes(currentSong.id)
-                            ? 'currentColor'
-                            : 'none'
-                        }
-                      />
-                    </button>
+                      className={`slide-dot ${playerTopTab === 0 ? 'active' : ''}`}
+                      onClick={() => setPlayerTopTab(0)}
+                      title="Ver Portada"
+                    />
+                    <div
+                      className={`slide-dot ${playerTopTab === 1 ? 'active' : ''}`}
+                      onClick={() => setPlayerTopTab(1)}
+                      title="Ver Lirica Sincronizada"
+                    />
                   </div>
                 </div>
 
-                {/* MITAD INFERIOR: Lista / Cola arrastrable con el dedo */}
+                {/* MITAD INFERIOR: Playlist en Curso con Arrastre (Drag and Drop) */}
                 <div className="player-bottom-playlist-section">
                   <div className="playlist-section-header">
                     <span className="playlist-section-title">
@@ -2217,7 +2200,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                           key={`${song.id}-${idx}`}
                           draggable={true}
                           onDragStart={() => handleDragStart(idx)}
-                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDragOver={handleDragOver}
                           onDrop={() => handleDrop(idx)}
                           className={`queue-item-draggable ${isCurrent ? 'active-playing' : ''}`}
                         >
@@ -2339,58 +2322,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
         </div>
       </main>
 
-      {/* MODAL DE LETRAS SINCRONIZADAS (.LRC) */}
-      {showLrcModal && (
-        <div
-          className="lyrics-modal-backdrop"
-          onClick={() => setShowLrcModal(false)}
-        >
-          <div
-            className="lyrics-card"
-            style={{ maxWidth: '420px', maxHeight: '75vh' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="lyrics-header">
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>
-                  Letras Sincronizadas (.lrc)
-                </h3>
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  {currentSong.title} — {currentSong.artist}
-                </p>
-              </div>
-              <button className="ctrl-btn" onClick={() => setShowLrcModal(false)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="lrc-lyrics-container">
-              {activeParsedLyrics.length > 0 ? (
-                activeParsedLyrics.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className={`lrc-lyric-line ${idx === currentLrcLineIndex ? 'active' : ''}`}
-                    onClick={() => {
-                      if (audioRef.current) {
-                        audioRef.current.currentTime = item.time;
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {item.text}
-                  </div>
-                ))
-              ) : (
-                <p style={{ color: 'var(--text-muted)' }}>
-                  No hay letras .lrc registradas para esta cancion.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL PARA AGREGAR PISTAS A LA LISTA EN REPRODUCCION */}
+      {/* MODAL PARA AGREGAR PISTAS A LA LISTA */}
       {showAddTrackModal && (
         <div
           className="lyrics-modal-backdrop"
@@ -2413,7 +2345,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
               </button>
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.8rem' }}>
-              Selecciona una pista del catalogo general para anadirla al final de tu lista actual:
+              Selecciona una pista del catalogo para anadirla al final de la playlist:
             </p>
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {songs.map((song) => (
@@ -2436,7 +2368,7 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
         </div>
       )}
 
-      {/* MODAL PARA CREAR LISTA DE REPRODUCCION EN LIBRERIA */}
+      {/* MODAL PARA CREAR PLAYLIST */}
       {showNewPlaylistModal && (
         <div
           className="lyrics-modal-backdrop"

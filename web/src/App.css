@@ -466,7 +466,7 @@
   z-index: 90;
 }
 
-/* Contenido deslizable del telefono con espacio de sobra para que NADA se tape */
+/* Contenido deslizable del telefono */
 .phone-viewport {
   flex: 1;
   overflow-y: auto;
@@ -477,7 +477,7 @@
   z-index: 10;
 }
 
-/* CORRECCION DEL BUG: Cabecera y pestanas sticky que NUNCA se encogen ni se van arriba */
+/* Cabecera y pestanas sticky */
 .phone-screen-header {
   display: flex;
   align-items: center;
@@ -498,7 +498,6 @@
   color: var(--phone-text, #ffffff);
 }
 
-/* Pestanas de libreria que nunca se encogen ni se tapan */
 .library-subtabs {
   display: flex;
   gap: 0.5rem;
@@ -619,7 +618,6 @@
 }
 
 /* NUEVA DISPOSICION DEL REPRODUCTOR A PANTALLA COMPLETA */
-/* Caratula arriba ocupando casi la mitad + Playlist arrastrable abajo */
 .phone-player-modal {
   position: absolute;
   inset: 0;
@@ -641,57 +639,72 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.6rem;
   flex-shrink: 0;
 }
 
-/* MITAD SUPERIOR: Caratula e informacion principal */
-.player-top-section {
+/* CONTENEDOR DESLIZABLE HORIZONTAL: PORTADA <-> LIRICA (.LRC / .ICR) */
+.player-top-slider-wrapper {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.player-top-slider-track {
+  display: flex;
+  width: 200%;
+  transition: transform 0.35s cubic-bezier(0.2, 1, 0.3, 1);
+}
+
+/* Slide 1: Portada y Controles */
+.player-slide-item {
+  width: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   flex-shrink: 0;
-  padding-bottom: 0.8rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0 4px;
 }
 
 .player-big-cover {
-  width: 170px;
-  height: 170px;
-  border-radius: var(--phone-radius, 20px);
+  width: 155px;
+  height: 155px;
+  border-radius: var(--phone-radius, 18px);
   object-fit: cover;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
-  margin-bottom: 0.75rem;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
+  margin-bottom: 0.5rem;
 }
 
 .player-track-info-header {
   text-align: center;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.5rem;
   width: 100%;
 }
 
 .player-main-title {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 800;
   color: var(--phone-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.1rem;
 }
 
 .player-main-artist {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--phone-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Barra de progreso superior compacta */
 .player-progress-wrap {
   width: 100%;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.5rem;
 }
 
 .player-progress-bar {
@@ -715,18 +728,17 @@
   color: var(--phone-text-muted);
 }
 
-/* Botones principales de reproduccion */
 .player-controls-compact {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 1.4rem;
   width: 100%;
 }
 
 .play-circle-btn {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--phone-player-accent);
   color: #000000;
@@ -734,6 +746,90 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Slide 2: Lirica Sincronizada con Swipe y Lupita flotante */
+.player-slide-lyrics-wrap {
+  width: 50%;
+  height: 275px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--phone-radius, 18px);
+  padding: 0.8rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lyrics-slide-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  text-align: center;
+  padding: 0.5rem 0 2rem;
+}
+
+.lyrics-slide-line {
+  font-size: 0.88rem;
+  color: var(--phone-text-muted);
+  line-height: 1.4;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.lyrics-slide-line.active {
+  color: var(--phone-player-accent);
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-shadow: 0 0 12px rgba(6, 182, 212, 0.5);
+}
+
+/* Lupita flotante abajo a la derecha de la lirica */
+.lyrics-search-fab {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--phone-player-accent, #06b6d4);
+  color: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  z-index: 10;
+}
+
+.lyrics-search-fab:hover {
+  transform: scale(1.1);
+}
+
+/* Indicador de deslizamiento (Pills Portada / Lirica) */
+.slide-indicator-pills {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 0.4rem;
+}
+
+.slide-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.slide-dot.active {
+  width: 18px;
+  border-radius: 999px;
+  background: var(--phone-player-accent);
 }
 
 /* MITAD INFERIOR: Lista arrastrable con el dedo (Drag and Drop) */
@@ -761,7 +857,6 @@
   text-transform: uppercase;
 }
 
-/* Fila de pista arrastrable */
 .queue-item-draggable {
   display: flex;
   align-items: center;
@@ -820,32 +915,6 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* VISOR DE LETRAS SINCRONIZADAS (.LRC) */
-.lrc-lyrics-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.2rem;
-  padding: 1.5rem 0;
-  text-align: center;
-  overflow-y: auto;
-  max-height: 260px;
-}
-
-.lrc-lyric-line {
-  font-size: 0.95rem;
-  color: var(--phone-text-muted);
-  transition: all 0.25s ease;
-  line-height: 1.5;
-}
-
-.lrc-lyric-line.active {
-  color: var(--phone-player-accent);
-  font-size: 1.2rem;
-  font-weight: 800;
-  text-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
-}
-
 /* SECCIONES DENTRO DE LA PANTALLA DE AJUSTES DE LA APP */
 .inapp-settings-section {
   background: var(--phone-surface, #141418);
@@ -865,7 +934,6 @@
   gap: 0.5rem;
 }
 
-/* Guardar preset de estilo de colores e imagen */
 .save-style-preset-row {
   display: flex;
   gap: 6px;
@@ -912,7 +980,6 @@
   max-width: 180px;
 }
 
-/* Presets manager bar (guardar y eliminar) */
 .eq-preset-manager-row {
   display: flex;
   align-items: center;
@@ -987,7 +1054,6 @@
   font-weight: 700;
 }
 
-/* Volumen++ hasta 200% y Diales */
 .vol-boost-card {
   background: var(--phone-surface, #141418);
   border-radius: var(--phone-radius, 16px);
@@ -1035,7 +1101,6 @@
   margin: 0.4rem 0;
 }
 
-/* Tarjetas de perfiles de salida de audio */
 .output-profile-grid {
   display: flex;
   flex-direction: column;
@@ -1085,7 +1150,6 @@
   line-height: 1.35;
 }
 
-/* Filas simetricas de canciones / carpetas */
 .phone-item-row {
   display: flex;
   align-items: center;
@@ -1129,7 +1193,6 @@
   text-overflow: ellipsis;
 }
 
-/* Cuadricula simetrica de tarjetas */
 .phone-card-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

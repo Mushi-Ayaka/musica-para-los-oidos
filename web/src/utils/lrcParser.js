@@ -1,4 +1,4 @@
-// Utilidad para parseo y sincronizacion de archivos de letra LRC (.lrc)
+// Utilidad para parseo y sincronizacion de archivos de letra LRC (.lrc / .irc / .icr)
 
 export function parseLRC(lrcText) {
   if (!lrcText || typeof lrcText !== 'string') return [];
@@ -37,7 +37,24 @@ export function getCurrentLrcIndex(lrcArray, currentTime) {
   return 0;
 }
 
-// Mapeo inicial de archivos LRC simulados en el almacenamiento del dispositivo
+// Buscar en el almacenamiento del dispositivo por nombre de cancion admitiendo extensiones .lrc, .irc y .icr
+export function findMatchingLyric(title, filesMap) {
+  if (!title || !filesMap) return null;
+  const normalizedTitle = title.trim().toLowerCase();
+  const extensions = ['.lrc', '.irc', '.icr'];
+
+  for (const [fileName, content] of Object.entries(filesMap)) {
+    const lowerName = fileName.toLowerCase();
+    for (const ext of extensions) {
+      if (lowerName === `${normalizedTitle}${ext}`) {
+        return { fileName, content };
+      }
+    }
+  }
+  return null;
+}
+
+// Mapeo inicial de archivos de letra simulados en el almacenamiento del dispositivo
 export const MOCK_DEVICE_LRC_FILES = {
   "Nebulosa Estelar.lrc": `[00:02.00] Luces de neon se encienden al caer el sol
 [00:08.50] Un pulso electrico recorre la ciudad entera
@@ -48,14 +65,14 @@ export const MOCK_DEVICE_LRC_FILES = {
 [00:52.00] Constelaciones que brillan a nuestro compas
 [01:05.00] Frecuencia pura en el infinito`,
 
-  "Brisa del Oceano.lrc": `[00:01.50] El sonido de las olas susurra tu nombre
+  "Brisa del Oceano.irc": `[00:01.50] El sonido de las olas susurra tu nombre
 [00:09.00] Cuerdas de nylon bajo el cielo abierto
 [00:18.00] La marea se lleva cualquier preocupacion
 [00:27.00] Paz en cada acorde, un refugio en la cancion
 [00:38.00] Viento suave que acaricia la memoria
 [00:49.00] Silencio y calma en el horizonte`,
 
-  "Latidos de Medianoche.lrc": `[00:02.00] Taza caliente y la lluvia en el cristal
+  "Latidos de Medianoche.icr": `[00:02.00] Taza caliente y la lluvia en el cristal
 [00:10.00] El vinilo gira suave, todo fluye natural
 [00:19.00] Ideas que toman forma en la noche sin final
 [00:29.00] Musica para los oidos, medicina sensorial
