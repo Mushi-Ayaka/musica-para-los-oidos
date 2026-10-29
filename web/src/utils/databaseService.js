@@ -2,11 +2,11 @@
 // Proyecto: Musica para los Oidos
 
 const DB_NAME = 'MusicaParaLosOidosDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Inicializar base de datos IndexedDB en el navegador
 export function openAppDatabase() {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (typeof window === 'undefined' || !window.indexedDB) {
       resolve(null);
       return;
@@ -17,19 +17,19 @@ export function openAppDatabase() {
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
 
+      // Tabla de pistas y catalogo indexado offline
+      if (!db.objectStoreNames.contains('tracks')) {
+        const store = db.createObjectStore('tracks', { keyPath: 'id' });
+        store.createIndex('title', 'title', { unique: false });
+        store.createIndex('artist', 'artist', { unique: false });
+        store.createIndex('album', 'album', { unique: false });
+        store.createIndex('folder', 'folder', { unique: false });
+      }
+
       // Tabla de ubicaciones fisicas de archivos (Zero-copy)
       if (!db.objectStoreNames.contains('track_locations')) {
         const store = db.createObjectStore('track_locations', { keyPath: 'id', autoIncrement: true });
         store.createIndex('absolute_path', 'absolute_path', { unique: true });
-        store.createIndex('folder_id', 'folder_id', { unique: false });
-      }
-
-      // Tabla de pistas y metadatos
-      if (!db.objectStoreNames.contains('tracks')) {
-        const store = db.createObjectStore('tracks', { keyPath: 'id', autoIncrement: true });
-        store.createIndex('title', 'title', { unique: false });
-        store.createIndex('artist', 'artist', { unique: false });
-        store.createIndex('album', 'album', { unique: false });
       }
 
       // Tabla de listas de reproduccion
@@ -39,8 +39,7 @@ export function openAppDatabase() {
 
       // Tabla de letras sincronizadas
       if (!db.objectStoreNames.contains('lyrics_tracking')) {
-        const store = db.createObjectStore('lyrics_tracking', { keyPath: 'id', autoIncrement: true });
-        store.createIndex('track_id', 'track_id', { unique: true });
+        db.createObjectStore('lyrics_tracking', { keyPath: 'fileName' });
       }
 
       // Historial de descargas
@@ -73,17 +72,54 @@ export function openAppDatabase() {
 // Generar paquete completo de copia de seguridad (Fase 3)
 export function createBackupPayload(appState) {
   const timestamp = new Date().toISOString();
+  const rawSongs = appState.songs || [];
+
+  // Exportar el catalogo de pistas indexadas con sus rutas relativas
+  const indexedTracks = rawSongs.map((s) => ({
+    id: s.id,
+    title: s.title,
+    artist: s.artist,
+    album: s.album,
+    duration: s.duration,
+    folder: s.folder || '/Musica',
+    genre: s.genre || 'Desconocido',
+    mood: s.mood || '',
+    cover: s.cover || '',
+    plays: s.plays || 0,
+    addedAt: s.addedAt || timestamp.split('T')[0],
+    isFavorite: (appState.likedSongIds || []).includes(s.id)
+  }));
+
   return {
     app: 'Musica para los Oidos',
     version: '3.0.0',
     schemaVersion: 2,
     createdAt: timestamp,
+    summary: {
+      totalTracks: indexedTracks.length,
+      totalPlaylists: (appState.playlists || []).length,
+      totalLikedSongs: (appState.likedSongIds || []).length,
+      totalCustomPresets: (appState.customStylePresets || []).length,
+      totalEqPresets: (appState.eqPresets || []).length,
+      totalLrcFiles: Object.keys(appState.lrcFilesMap || {}).length,
+      totalDownloadsRecorded: (appState.downloadHistory || []).length
+    },
     data: {
+      // 1. Catalogo de canciones offline indexadas
+      tracks: indexedTracks,
+
+      // 2. Mapa completo de archivos de letras .lrc
+      lrcFilesMap: appState.lrcFilesMap || {},
+
+      // 3. Listas de reproduccion y sus ordenes de pistas
       playlists: appState.playlists || [],
+
+      // 4. Canciones favoritas (IDs y titulos para re-vinculacion en nuevo telefono)
       likedSongIds: appState.likedSongIds || [],
-      customStylePresets: appState.customStylePresets || [],
+      favoriteTitles: indexedTracks.filter((t) => t.isFavorite).map((t) => ({ title: t.title, artist: t.artist })),
+
+      // 5. Presets de ecualizador y audio
       eqPresets: appState.eqPresets || [],
-      themeVars: appState.themeVars || {},
       audioSettings: {
         volumePercent: appState.volumePercent || 100,
         outputProfile: appState.outputProfile || 'studio_monitor',
@@ -91,10 +127,20 @@ export function createBackupPayload(appState) {
         eqEnabled: appState.eqEnabled ?? true,
         selectedEqPresetId: appState.selectedEqPresetId || 'flat'
       },
-      downloadHistory: appState.downloadHistory || [],
+
+      // 6. Presets de estilo visual, tema y fondo de pantalla
+      customStylePresets: appState.customStylePresets || [],
+      themeVars: appState.themeVars || {},
+
+      // 7. Directorios y filtros de la biblioteca
       monitoredFolders: appState.folders || [],
       trackSortOrder: appState.trackSortOrder || 'az',
       trackFolderFilter: appState.trackFolderFilter || 'all',
+
+      // 8. Historial de descargas
+      downloadHistory: appState.downloadHistory || [],
+
+      // 9. Metadatos de sincronizacion
       cloudSyncMeta: {
         lastExportedAt: timestamp,
         provider: 'Google Drive',
@@ -136,7 +182,10 @@ export function parseAndValidateBackup(jsonString) {
     const payload = parsed.data || parsed;
     return {
       success: true,
+      summary: parsed.summary || null,
       payload: {
+        tracks: Array.isArray(payload.tracks) ? payload.tracks : null,
+        lrcFilesMap: payload.lrcFilesMap && typeof payload.lrcFilesMap === 'object' ? payload.lrcFilesMap : null,
         playlists: Array.isArray(payload.playlists) ? payload.playlists : [],
         likedSongIds: Array.isArray(payload.likedSongIds) ? payload.likedSongIds : [],
         customStylePresets: Array.isArray(payload.customStylePresets) ? payload.customStylePresets : [],
@@ -165,9 +214,8 @@ export function uploadToGoogleDriveSimulated(backupPayload) {
         sizeBytes: JSON.stringify(backupPayload).length,
         syncedAt: new Date().toISOString(),
         accountEmail: 'usuario.musica@gmail.com',
-        storageUsedPct: 24
+        tracksCount: backupPayload?.summary?.totalTracks || 0
       };
-      // Guardar en localStorage como persistencia en el navegador
       try {
         localStorage.setItem('mplo_gdrive_cloud_backup', JSON.stringify({
           payload: backupPayload,
@@ -177,7 +225,7 @@ export function uploadToGoogleDriveSimulated(backupPayload) {
         console.warn('No se pudo guardar en almacenamiento local:', e);
       }
       resolve(driveRecord);
-    }, 900);
+    }, 850);
   });
 }
 
@@ -192,10 +240,10 @@ export function restoreFromGoogleDriveSimulated() {
           resolve({
             success: true,
             payload: parsed.payload?.data || parsed.payload,
+            summary: parsed.payload?.summary || null,
             meta: parsed.meta
           });
         } else {
-          // Si no habia una previa en localStorage, generar una copia de demostracion en la nube
           resolve({
             success: true,
             isDemo: true,
@@ -210,6 +258,6 @@ export function restoreFromGoogleDriveSimulated() {
       } catch (err) {
         reject(err);
       }
-    }, 850);
+    }, 800);
   });
 }

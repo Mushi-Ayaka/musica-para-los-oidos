@@ -573,6 +573,8 @@ export default function App() {
   // --- FUNCIONES DE COPIA DE SEGURIDAD Y GOOGLE DRIVE (FASE 3) ---
   const handleExportBackup = () => {
     const payload = createBackupPayload({
+      songs,
+      lrcFilesMap,
       playlists,
       likedSongIds,
       customStylePresets,
@@ -607,6 +609,8 @@ export default function App() {
       }
 
       const p = result.payload;
+      if (p.tracks && p.tracks.length > 0) setSongs(p.tracks);
+      if (p.lrcFilesMap) setLrcFilesMap((prev) => ({ ...prev, ...p.lrcFilesMap }));
       if (p.playlists && p.playlists.length > 0) setPlaylists(p.playlists);
       if (p.likedSongIds) setLikedSongIds(p.likedSongIds);
       if (p.customStylePresets) setCustomStylePresets(p.customStylePresets);
@@ -632,6 +636,8 @@ export default function App() {
   const handleUploadToGoogleDrive = async () => {
     setIsSyncingDrive(true);
     const payload = createBackupPayload({
+      songs,
+      lrcFilesMap,
       playlists,
       likedSongIds,
       customStylePresets,
@@ -667,6 +673,8 @@ export default function App() {
       setIsSyncingDrive(false);
       if (res.payload) {
         const p = res.payload;
+        if (p.tracks && p.tracks.length > 0) setSongs(p.tracks);
+        if (p.lrcFilesMap) setLrcFilesMap((prev) => ({ ...prev, ...p.lrcFilesMap }));
         if (p.playlists && p.playlists.length > 0) setPlaylists(p.playlists);
         if (p.likedSongIds) setLikedSongIds(p.likedSongIds);
         if (p.customStylePresets) setCustomStylePresets(p.customStylePresets);
@@ -2670,7 +2678,6 @@ const playerAccentColor = Color(0xFF${(themeVars.playerAccent || themeVars.accen
                           <div className="cloud-account-email">{cloudAccountEmail}</div>
                         </div>
                       </div>
-                      <span className="cloud-status-badge">Conectado</span>
                     </div>
 
                     <div className="cloud-sync-info-row">
