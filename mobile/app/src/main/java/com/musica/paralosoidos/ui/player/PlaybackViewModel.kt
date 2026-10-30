@@ -8,7 +8,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
-import com.musica.paralosoidos.data.AppContainer
+import com.musica.paralosoidos.data.LibraryRepository
 import com.musica.paralosoidos.data.TrackEntity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
+class PlaybackViewModel(private val repository: LibraryRepository) : ViewModel() {
     private var controller: MediaController? = null
     private var listener: Player.Listener? = null
     private var tickerJob: Job? = null
@@ -54,7 +54,7 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            container.tracks.observeAll().collect { list ->
+            repository.tracks.collect { list ->
                 tracksById = list.associateBy { it.id.toString() }
                 _nowPlaying.value = controller?.currentMediaItem?.mediaId?.let(tracksById::get)
             }
@@ -193,11 +193,11 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
         super.onCleared()
     }
 
-    class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
+    class Factory(private val repository: LibraryRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(PlaybackViewModel::class.java)) {
-                return PlaybackViewModel(container) as T
+                return PlaybackViewModel(repository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

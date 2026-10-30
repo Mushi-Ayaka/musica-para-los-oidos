@@ -38,6 +38,7 @@ class AppContainer(context: Context) {
 
     val tracks = database.trackDao()
     val catalogTracks = database.catalogTrackDao()
+    val libraryRepository by lazy { LibraryRepository(this) }
     val downloadSettings = DownloadSettings(context)
     val audioOutputProfileSettings = AudioOutputProfileSettings(context)
     val preferences = AppPreferences(context)

@@ -3,7 +3,7 @@ package com.musica.paralosoidos.ui.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.musica.paralosoidos.data.AppContainer
+import com.musica.paralosoidos.data.LibraryRepository
 import com.musica.paralosoidos.data.MusicPlaylist
 import com.musica.paralosoidos.data.SavedEqPreset
 import com.musica.paralosoidos.data.ThemeSettingsState
@@ -32,17 +32,17 @@ private data class SearchableTrack(
     val album: String
 )
 
-class LibraryViewModel(private val container: AppContainer) : ViewModel() {
-    val tracks: StateFlow<List<TrackEntity>> = container.tracks.observeAll()
+class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() {
+    val tracks: StateFlow<List<TrackEntity>> = repository.tracks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val playlists: StateFlow<List<MusicPlaylist>> = container.preferences.playlists
+    val playlists: StateFlow<List<MusicPlaylist>> = repository.playlists
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val themeSettings: StateFlow<ThemeSettingsState> = container.preferences.themeSettings
+    val themeSettings: StateFlow<ThemeSettingsState> = repository.themeSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeSettingsState())
 
-    val customEqPresets: StateFlow<List<SavedEqPreset>> = container.preferences.customEqPresets
+    val customEqPresets: StateFlow<List<SavedEqPreset>> = repository.customEqPresets
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _searchQuery = MutableStateFlow("")
@@ -124,7 +124,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     fun refreshLibrary(force: Boolean = false) {
         viewModelScope.launch {
             _scanMessage.value = "Buscando audio..."
-            runCatching { container.refreshLocalAudio(force = force) }
+            runCatching { repository.refresh(force = force) }
                 .onSuccess { _scanMessage.value = null }
                 .onFailure {
                     _scanMessage.value = it.localizedMessage ?: "No se pudo leer el audio."
@@ -135,7 +135,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     fun upsertPlaylist(playlist: MusicPlaylist, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             val updated = playlists.value.filterNot { it.id == playlist.id } + playlist
-            runCatching { container.preferences.savePlaylists(updated) }
+            runCatching { repository.savePlaylists(updated) }
                 .onSuccess { onResult(true, null) }
                 .onFailure {
                     onResult(false, "No se pudo guardar la lista: ${it.localizedMessage ?: "error desconocido"}")
@@ -146,7 +146,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     fun deletePlaylist(playlistId: String, onMessage: (String?) -> Unit) {
         viewModelScope.launch {
             runCatching {
-                container.preferences.savePlaylists(playlists.value.filterNot { it.id == playlistId })
+                repository.savePlaylists(playlists.value.filterNot { it.id == playlistId })
             }.onSuccess { onMessage("Lista eliminada.") }
                 .onFailure {
                     onMessage("No se pudo eliminar la lista: ${it.localizedMessage ?: "error desconocido"}")
@@ -169,7 +169,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         updatedIds.add(target, moved)
         viewModelScope.launch {
             runCatching {
-                container.preferences.savePlaylists(
+                repository.savePlaylists(
                     playlists.value.map { if (it.id == playlistId) it.copy(trackIds = updatedIds) else it }
                 )
             }.onFailure {
@@ -186,7 +186,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         val playlist = playlists.value.firstOrNull { it.id == playlistId } ?: return
         viewModelScope.launch {
             runCatching {
-                container.preferences.savePlaylists(
+                repository.savePlaylists(
                     playlists.value.map {
                         if (it.id == playlistId) {
                             it.copy(trackIds = it.trackIds.filterNot { id -> id == trackId })
@@ -203,7 +203,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
 
     fun saveThemeSettings(settings: ThemeSettingsState, onMessage: (String?) -> Unit) {
         viewModelScope.launch {
-            runCatching { container.preferences.saveThemeSettings(settings) }
+            runCatching { repository.saveThemeSettings(settings) }
                 .onSuccess { onMessage(null) }
                 .onFailure {
                     onMessage("No se pudo guardar el estilo: ${it.localizedMessage ?: "error desconocido"}")
@@ -214,18 +214,18 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     fun saveCustomEqPreset(preset: SavedEqPreset, onMessage: (String?) -> Unit) {
         viewModelScope.launch {
             val updated = customEqPresets.value.filterNot { it.name == preset.name } + preset
-            runCatching { container.preferences.saveCustomEqPresets(updated) }
+            runCatching { repository.saveCustomEqPresets(updated) }
                 .onFailure {
                     onMessage("No se pudo guardar el preset EQ: ${it.localizedMessage ?: "error desconocido"}")
                 }
         }
     }
 
-    class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
+    class Factory(private val repository: LibraryRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(LibraryViewModel::class.java)) {
-                return LibraryViewModel(container) as T
+                return LibraryViewModel(repository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

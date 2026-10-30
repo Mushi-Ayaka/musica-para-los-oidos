@@ -188,7 +188,7 @@ fun MusicaRoot(
     hasAudioPermission: () -> Boolean,
     requestAudioPermission: () -> Unit
 ) {
-    val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(container))
+    val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(container.libraryRepository))
     val tracks by libraryViewModel.tracks.collectAsState()
     val themeSettings by libraryViewModel.themeSettings.collectAsState()
     val customEqPresets by libraryViewModel.customEqPresets.collectAsState()
@@ -201,7 +201,7 @@ fun MusicaRoot(
     val filteredTracks by libraryViewModel.filteredTracks.collectAsState()
     val albums by libraryViewModel.albums.collectAsState()
 
-    val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container))
+    val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container.libraryRepository))
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val isPlaying by playbackViewModel.isPlaying.collectAsState()
     val position by playbackViewModel.position.collectAsState()
