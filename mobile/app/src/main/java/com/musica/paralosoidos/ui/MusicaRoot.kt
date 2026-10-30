@@ -4,6 +4,8 @@ import java.util.Locale
 
 import com.musica.paralosoidos.ui.theme.MusicaStyle
 import com.musica.paralosoidos.ui.components.AddTracksToPlaylistDialog
+import com.musica.paralosoidos.ui.library.LibraryViewModel
+import com.musica.paralosoidos.ui.library.SortOrder
 import com.musica.paralosoidos.ui.components.EmptyLibrary
 import com.musica.paralosoidos.ui.components.PlaylistDetailHeader
 import com.musica.paralosoidos.ui.components.PlaylistGalleryCard
@@ -118,6 +120,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
@@ -176,19 +179,6 @@ private enum class AppTab(val label: String) {
     }
 }
 
-private enum class SortOrder(val label: String) {
-    AZ("A-Z"),
-    ZA("Z-A"),
-    Recent("Recientes")
-}
-
-private data class SearchableTrack(
-    val track: TrackEntity,
-    val title: String,
-    val artist: String,
-    val album: String
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MusicaRoot(
@@ -197,15 +187,20 @@ fun MusicaRoot(
     hasAudioPermission: () -> Boolean,
     requestAudioPermission: () -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(AppTab.Home) }
-    val tracksFlow = remember(container) { container.tracks.observeAll() }
-    val tracks by tracksFlow.collectAsState(initial = emptyList())
-    val themeSettings by container.preferences.themeSettings.collectAsState(
-        initial = com.musica.paralosoidos.data.ThemeSettingsState()
-    )
-    val customEqPresets by container.preferences.customEqPresets.collectAsState(initial = emptyList())
-    val playlists by container.preferences.playlists.collectAsState(initial = emptyList())
+    val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(container))
+    val tracks by libraryViewModel.tracks.collectAsState()
+    val themeSettings by libraryViewModel.themeSettings.collectAsState()
+    val customEqPresets by libraryViewModel.customEqPresets.collectAsState()
+    val playlists by libraryViewModel.playlists.collectAsState()
+    val searchQuery by libraryViewModel.searchQuery.collectAsState()
+    val librarySubTab by libraryViewModel.librarySubTab.collectAsState()
+    val currentSortOrder by libraryViewModel.sortOrder.collectAsState()
+    val selectedLetterFilter by libraryViewModel.letterFilter.collectAsState()
+    val scanMessage by libraryViewModel.scanMessage.collectAsState()
+    val filteredTracks by libraryViewModel.filteredTracks.collectAsState()
+    val albums by libraryViewModel.albums.collectAsState()
 
+    var selectedTab by remember { mutableStateOf(AppTab.Home) }
     var nowPlaying by remember { mutableStateOf<TrackEntity?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var position by remember { mutableFloatStateOf(0f) }
@@ -217,7 +212,6 @@ fun MusicaRoot(
     var pendingImportPlan by remember { mutableStateOf<PlaylistImportPlan?>(null) }
     var audioOutputProfileMessage by remember { mutableStateOf<String?>(null) }
 
-    var scanMessage by remember { mutableStateOf<String?>(null) }
     var playbackError by remember { mutableStateOf<String?>(null) }
     var showPlayer by remember { mutableStateOf(false) }
     var shuffleEnabled by remember { mutableStateOf(false) }
@@ -225,16 +219,9 @@ fun MusicaRoot(
 
     var themeMessage by remember { mutableStateOf<String?>(null) }
 
-    // Dialogos y modales
-
-    // Filtros de biblioteca
-    var searchQuery by remember { mutableStateOf("") }
-    var librarySubTab by remember { mutableStateOf("Pistas") }
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
     var playlistMessage by remember { mutableStateOf<String?>(null) }
-    var currentSortOrder by remember { mutableStateOf(SortOrder.AZ) }
-    var selectedLetterFilter by remember { mutableStateOf<Char?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -268,8 +255,13 @@ fun MusicaRoot(
                     val plan = PlaylistTextCodec.analyzePlaylistJson(content, tracks)
                     if (plan.conflicts.isEmpty()) {
                         val imported = PlaylistTextCodec.createPlaylist(plan.playlistName, plan.autoResolvedTrackIds)
-                        container.preferences.savePlaylists(playlists + imported)
-                        playlistMessage = "Lista '${plan.playlistName}' importada correctamente (${plan.autoResolvedTrackIds.size} pistas)."
+                        libraryViewModel.upsertPlaylist(imported) { success, message ->
+                            playlistMessage = if (success) {
+                                "Lista '${plan.playlistName}' importada correctamente (${plan.autoResolvedTrackIds.size} pistas)."
+                            } else {
+                                message
+                            }
+                        }
                     } else {
                         pendingImportPlan = plan
                     }
@@ -309,10 +301,7 @@ fun MusicaRoot(
     }
 
     LaunchedEffect(controller, audioGranted) {
-        if (audioGranted) {
-            runCatching { container.refreshLocalAudio() }
-                .onFailure { scanMessage = it.localizedMessage ?: "No se pudo leer el audio." }
-        }
+        if (audioGranted) libraryViewModel.refreshLibrary()
     }
 
     DisposableEffect(controller) {
@@ -373,7 +362,7 @@ fun MusicaRoot(
 
     fun playTrack(track: TrackEntity, customQueue: List<TrackEntity> = tracks) {
         if (controller == null) {
-            scanMessage = "El reproductor aun se esta iniciando. Intentalo de nuevo."
+            playbackError = "El reproductor aún se está iniciando. Inténtalo de nuevo."
             return
         }
         playbackError = null
@@ -390,51 +379,6 @@ fun MusicaRoot(
                 tracksById[player.getMediaItemAt(index).mediaId]
             }
         }.orEmpty()
-    }
-
-    // Filtrar y ordenar pistas de biblioteca con texto ya normalizado.
-    val searchableTracks = remember(tracks) {
-        tracks.map {
-            SearchableTrack(
-                track = it,
-                title = it.title.lowercase(Locale.ROOT),
-                artist = it.artist.lowercase(Locale.ROOT),
-                album = it.album.lowercase(Locale.ROOT)
-            )
-        }
-    }
-    val filteredTracks by remember(tracks) {
-        derivedStateOf {
-            var result = searchableTracks
-
-            if (searchQuery.isNotBlank()) {
-                val q = searchQuery.trim().lowercase(Locale.ROOT)
-                result = result.filter {
-                    it.title.contains(q) || it.artist.contains(q) || it.album.contains(q)
-                }
-            }
-
-            if (selectedLetterFilter != null) {
-                val letter = selectedLetterFilter!!
-                result = if (letter == '#') {
-                    result.filter { it.track.title.firstOrNull()?.isLetter() != true }
-                } else {
-                    result.filter { it.track.title.startsWith(letter, ignoreCase = true) }
-                }
-            }
-
-            when (currentSortOrder) {
-                SortOrder.AZ -> result.sortedBy { it.title }
-                SortOrder.ZA -> result.sortedByDescending { it.title }
-                SortOrder.Recent -> result
-            }.map { it.track }
-        }
-    }
-
-    val albums = remember(tracks) {
-        tracks.filter { it.album.isNotBlank() }.groupBy { it.album }
-            .toList()
-            .sortedBy { it.first.lowercase() }
     }
 
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
@@ -649,14 +593,7 @@ fun MusicaRoot(
                                 message = scanMessage,
                                 onScan = {
                                     if (!hasAudioPermission()) requestAudioPermission()
-                                    else {
-                                        scanMessage = "Buscando audio..."
-                                        coroutineScope.launch {
-                                            runCatching { container.refreshLocalAudio(force = true) }
-                                                .onSuccess { scanMessage = null }
-                                                .onFailure { scanMessage = it.localizedMessage ?: "No se pudo leer el audio." }
-                                        }
-                                    }
+                                    else libraryViewModel.refreshLibrary(force = true)
                                 }
                             )
                         }
@@ -685,14 +622,7 @@ fun MusicaRoot(
                             Button(
                                 onClick = {
                                     if (!hasAudioPermission()) requestAudioPermission()
-                                    else {
-                                        scanMessage = "Buscando audio..."
-                                        coroutineScope.launch {
-                                            runCatching { container.refreshLocalAudio(force = true) }
-                                                .onSuccess { scanMessage = null }
-                                                .onFailure { scanMessage = it.localizedMessage ?: "No se pudo leer el audio." }
-                                        }
-                                    }
+                                    else libraryViewModel.refreshLibrary(force = true)
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
@@ -706,7 +636,7 @@ fun MusicaRoot(
                             listOf("Pistas", "Álbumes", "Listas").forEach { section ->
                                 FilterChip(
                                     selected = librarySubTab == section,
-                                    onClick = { librarySubTab = section },
+                                    onClick = { libraryViewModel.setLibrarySubTab(section) },
                                     label = { Text(section) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -768,10 +698,9 @@ fun MusicaRoot(
                                     },
                                     onAddSongsClick = { showAddTracksDialog = true },
                                     onDeletePlaylist = {
-                                        coroutineScope.launch {
-                                            container.preferences.savePlaylists(playlists.filterNot { it.id == activePlaylist.id })
+                                        libraryViewModel.deletePlaylist(activePlaylist.id) { message ->
                                             selectedPlaylistForDetail = null
-                                            playlistMessage = "Lista eliminada."
+                                            playlistMessage = message
                                         }
                                     }
                                 )
@@ -803,38 +732,24 @@ fun MusicaRoot(
                                         canMoveDown = trackIndex >= 0 && trackIndex < activePlaylist.trackIds.lastIndex,
                                         onPlay = { playTrack(track, playlistTracks) },
                                         onMoveUp = {
-                                            coroutineScope.launch {
-                                                val updatedIds = activePlaylist.trackIds.toMutableList()
-                                                val curr = updatedIds.indexOf(track.id)
-                                                if (curr > 0) {
-                                                    val moved = updatedIds.removeAt(curr)
-                                                    updatedIds.add(curr - 1, moved)
-                                                    container.preferences.savePlaylists(
-                                                        playlists.map { if (it.id == activePlaylist.id) it.copy(trackIds = updatedIds) else it }
-                                                    )
-                                                }
-                                            }
+                                            libraryViewModel.movePlaylistTrack(
+                                                activePlaylist.id,
+                                                track.id,
+                                                -1
+                                            ) { playlistMessage = it }
                                         },
                                         onMoveDown = {
-                                            coroutineScope.launch {
-                                                val updatedIds = activePlaylist.trackIds.toMutableList()
-                                                val curr = updatedIds.indexOf(track.id)
-                                                if (curr >= 0 && curr < updatedIds.lastIndex) {
-                                                    val moved = updatedIds.removeAt(curr)
-                                                    updatedIds.add(curr + 1, moved)
-                                                    container.preferences.savePlaylists(
-                                                        playlists.map { if (it.id == activePlaylist.id) it.copy(trackIds = updatedIds) else it }
-                                                    )
-                                                }
-                                            }
+                                            libraryViewModel.movePlaylistTrack(
+                                                activePlaylist.id,
+                                                track.id,
+                                                1
+                                            ) { playlistMessage = it }
                                         },
                                         onRemove = {
-                                            coroutineScope.launch {
-                                                val updatedIds = activePlaylist.trackIds.filterNot { it == track.id }
-                                                container.preferences.savePlaylists(
-                                                    playlists.map { if (it.id == activePlaylist.id) it.copy(trackIds = updatedIds) else it }
-                                                )
-                                            }
+                                            libraryViewModel.removePlaylistTrack(
+                                                activePlaylist.id,
+                                                track.id
+                                            ) { playlistMessage = it }
                                         }
                                     )
                                 }
@@ -887,13 +802,13 @@ fun MusicaRoot(
                     item {
                         OutlinedTextField(
                             value = searchQuery,
-                            onValueChange = { searchQuery = it },
+                            onValueChange = { libraryViewModel.setSearchQuery(it) },
                             modifier = Modifier.fillMaxWidth(),
                             placeholder = { Text("Buscar pistas, artistas o albumes...", fontSize = 13.sp) },
                             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                             trailingIcon = {
                                 if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
+                                    IconButton(onClick = { libraryViewModel.setSearchQuery("") }) {
                                         Icon(Icons.Default.Close, contentDescription = "Limpiar busqueda")
                                     }
                                 }
@@ -920,7 +835,7 @@ fun MusicaRoot(
                             SortOrder.entries.forEach { order ->
                                 FilterChip(
                                     selected = currentSortOrder == order,
-                                    onClick = { currentSortOrder = order },
+                                    onClick = { libraryViewModel.setSortOrder(order) },
                                     label = { Text(order.label, fontSize = 12.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -939,7 +854,7 @@ fun MusicaRoot(
                         ) {
                             item {
                                 SuggestionChip(
-                                    onClick = { selectedLetterFilter = null },
+                                    onClick = { libraryViewModel.setLetterFilter(null) },
                                     label = { Text("Todos", fontSize = 11.sp) },
                                     colors = SuggestionChipDefaults.suggestionChipColors(
                                         containerColor = if (selectedLetterFilter == null) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.borderStrong,
@@ -952,7 +867,7 @@ fun MusicaRoot(
                                 val isSelected = selectedLetterFilter == char
                                 SuggestionChip(
                                     onClick = {
-                                        selectedLetterFilter = if (isSelected) null else char
+                                        libraryViewModel.setLetterFilter(if (isSelected) null else char)
                                     },
                                     label = { Text(char.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                                     colors = SuggestionChipDefaults.suggestionChipColors(
@@ -1005,15 +920,7 @@ fun MusicaRoot(
                             onOutputProfileSelected = ::saveOutputProfile,
                             outputProfileMessage = audioOutputProfileMessage,
                             onSaveCustomPreset = { preset ->
-                                coroutineScope.launch {
-                                    runCatching {
-                                        container.preferences.saveCustomEqPresets(
-                                            (customEqPresets.filterNot { it.name == preset.name } + preset)
-                                        )
-                                    }.onFailure {
-                                        themeMessage = "No se pudo guardar el preset EQ: ${it.localizedMessage ?: "error desconocido"}"
-                                    }
-                                }
+                                libraryViewModel.saveCustomEqPreset(preset) { themeMessage = it }
                             }
                         )
                     }
@@ -1023,8 +930,9 @@ fun MusicaRoot(
                     item {
                         ThemeSettingsSection(
                             savedSettings = themeSettings,
-                            onSave = { container.preferences.saveThemeSettings(it) },
-                            onMessage = { themeMessage = it }
+                            onSave = { settings ->
+                                libraryViewModel.saveThemeSettings(settings) { themeMessage = it }
+                            }
                         )
                     }
                     item {
@@ -1116,16 +1024,14 @@ fun MusicaRoot(
                             name = newPlaylistName.trim(),
                             trackIds = emptyList()
                         )
-                        coroutineScope.launch {
-                            runCatching { container.preferences.savePlaylists(playlists + playlist) }
-                                .onSuccess {
-                                    playlistMessage = null
-                                    showNewPlaylistDialog = false
-                                    newPlaylistName = ""
-                                }
-                                .onFailure {
-                                    playlistMessage = "No se pudo crear la lista: ${it.localizedMessage ?: "error desconocido"}"
-                                }
+                        libraryViewModel.upsertPlaylist(playlist) { success, message ->
+                            if (success) {
+                                playlistMessage = null
+                                showNewPlaylistDialog = false
+                                newPlaylistName = ""
+                            } else {
+                                playlistMessage = message
+                            }
                         }
                     }
                 ) {
@@ -1148,14 +1054,16 @@ fun MusicaRoot(
             allTracks = tracks,
             onDismiss = { showAddTracksDialog = false },
             onAddTracks = { addedTracks ->
-                coroutineScope.launch {
-                    val updatedIds = (activePl.trackIds + addedTracks.map { it.id }).distinct()
-                    container.preferences.savePlaylists(
-                        playlists.map { if (it.id == activePl.id) it.copy(trackIds = updatedIds) else it }
-                    )
-                    selectedPlaylistForDetail = activePl.copy(trackIds = updatedIds)
-                    showAddTracksDialog = false
-                    playlistMessage = "Se añadieron ${addedTracks.size} canciones a '${activePl.name}'."
+                val updatedIds = (activePl.trackIds + addedTracks.map { it.id }).distinct()
+                val updatedPlaylist = activePl.copy(trackIds = updatedIds)
+                libraryViewModel.upsertPlaylist(updatedPlaylist) { success, message ->
+                    if (success) {
+                        selectedPlaylistForDetail = updatedPlaylist
+                        showAddTracksDialog = false
+                        playlistMessage = "Se añadieron ${addedTracks.size} canciones a '${activePl.name}'."
+                    } else {
+                        playlistMessage = message
+                    }
                 }
             }
         )
@@ -1166,11 +1074,14 @@ fun MusicaRoot(
             plan = plan,
             onDismiss = { pendingImportPlan = null },
             onConfirm = { resolvedTrackIds ->
-                coroutineScope.launch {
-                    val newPlaylist = PlaylistTextCodec.createPlaylist(plan.playlistName, resolvedTrackIds)
-                    container.preferences.savePlaylists(playlists + newPlaylist)
-                    playlistMessage = "Lista '${plan.playlistName}' importada con ${resolvedTrackIds.size} canciones."
-                    pendingImportPlan = null
+                val newPlaylist = PlaylistTextCodec.createPlaylist(plan.playlistName, resolvedTrackIds)
+                libraryViewModel.upsertPlaylist(newPlaylist) { success, message ->
+                    if (success) {
+                        playlistMessage = "Lista '${plan.playlistName}' importada con ${resolvedTrackIds.size} canciones."
+                        pendingImportPlan = null
+                    } else {
+                        playlistMessage = message
+                    }
                 }
             }
         )

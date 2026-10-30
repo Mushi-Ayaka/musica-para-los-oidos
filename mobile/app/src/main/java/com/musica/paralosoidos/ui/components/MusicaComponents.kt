@@ -167,18 +167,13 @@ fun SectionTitle(title: String, subtitle: String) {
 @Composable
 internal fun ThemeSettingsSection(
     savedSettings: com.musica.paralosoidos.data.ThemeSettingsState,
-    onSave: suspend (com.musica.paralosoidos.data.ThemeSettingsState) -> Unit,
-    onMessage: (String?) -> Unit
+    onSave: (com.musica.paralosoidos.data.ThemeSettingsState) -> Unit
 ) {
     var draft by remember(savedSettings) { mutableStateOf(savedSettings) }
     LaunchedEffect(draft) {
         if (draft != savedSettings) {
             delay(300)
-            runCatching { onSave(draft) }
-                .onSuccess { onMessage(null) }
-                .onFailure {
-                    onMessage("No se pudo guardar el estilo: ${it.localizedMessage ?: "error desconocido"}")
-                }
+            onSave(draft)
         }
     }
     ThemeSettingsScreen(settings = draft, onSettingsChange = { draft = it })
