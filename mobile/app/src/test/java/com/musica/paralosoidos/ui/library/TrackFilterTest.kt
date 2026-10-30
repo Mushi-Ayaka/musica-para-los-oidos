@@ -64,7 +64,7 @@ class TrackFilterTest {
             track(3, "...And Justice")
         )
 
-        assertEquals(listOf(2L, 3L), apply(tracks, letter = '#').map { it.id })
+        assertEquals(listOf(2L, 3L), apply(tracks, order = SortOrder.Recent, letter = '#').map { it.id })
     }
 
     @Test
