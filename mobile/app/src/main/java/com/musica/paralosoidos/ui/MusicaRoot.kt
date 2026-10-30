@@ -111,7 +111,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -189,43 +190,53 @@ fun MusicaRoot(
     requestAudioPermission: () -> Unit
 ) {
     val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(container.libraryRepository))
-    val tracks by libraryViewModel.tracks.collectAsState()
-    val themeSettings by libraryViewModel.themeSettings.collectAsState()
-    val customEqPresets by libraryViewModel.customEqPresets.collectAsState()
-    val playlists by libraryViewModel.playlists.collectAsState()
-    val searchQuery by libraryViewModel.searchQuery.collectAsState()
-    val librarySubTab by libraryViewModel.librarySubTab.collectAsState()
-    val currentSortOrder by libraryViewModel.sortOrder.collectAsState()
-    val selectedLetterFilter by libraryViewModel.letterFilter.collectAsState()
-    val scanMessage by libraryViewModel.scanMessage.collectAsState()
-    val filteredTracks by libraryViewModel.filteredTracks.collectAsState()
-    val albums by libraryViewModel.albums.collectAsState()
+    val tracks by libraryViewModel.tracks.collectAsStateWithLifecycle()
+    val themeSettings by libraryViewModel.themeSettings.collectAsStateWithLifecycle()
+    val customEqPresets by libraryViewModel.customEqPresets.collectAsStateWithLifecycle()
+    val playlists by libraryViewModel.playlists.collectAsStateWithLifecycle()
+    val searchQuery by libraryViewModel.searchQuery.collectAsStateWithLifecycle()
+    val librarySubTab by libraryViewModel.librarySubTab.collectAsStateWithLifecycle()
+    val currentSortOrder by libraryViewModel.sortOrder.collectAsStateWithLifecycle()
+    val selectedLetterFilter by libraryViewModel.letterFilter.collectAsStateWithLifecycle()
+    val scanMessage by libraryViewModel.scanMessage.collectAsStateWithLifecycle()
+    val filteredTracks by libraryViewModel.filteredTracks.collectAsStateWithLifecycle()
+    val albums by libraryViewModel.albums.collectAsStateWithLifecycle()
 
     val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container.libraryRepository))
-    val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
-    val isPlaying by playbackViewModel.isPlaying.collectAsState()
-    val position by playbackViewModel.position.collectAsState()
-    val duration by playbackViewModel.duration.collectAsState()
-    val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
-    val shuffleEnabled by playbackViewModel.shuffleEnabled.collectAsState()
-    val repeatMode by playbackViewModel.repeatMode.collectAsState()
-    val playbackError by playbackViewModel.playbackError.collectAsState()
-    val playbackQueue by playbackViewModel.queue.collectAsState()
+    val nowPlaying by playbackViewModel.nowPlaying.collectAsStateWithLifecycle()
+    val isPlaying by playbackViewModel.isPlaying.collectAsStateWithLifecycle()
+    val position by playbackViewModel.position.collectAsStateWithLifecycle()
+    val duration by playbackViewModel.duration.collectAsStateWithLifecycle()
+    val playbackSpeed by playbackViewModel.playbackSpeed.collectAsStateWithLifecycle()
+    val shuffleEnabled by playbackViewModel.shuffleEnabled.collectAsStateWithLifecycle()
+    val repeatMode by playbackViewModel.repeatMode.collectAsStateWithLifecycle()
+    val playbackError by playbackViewModel.playbackError.collectAsStateWithLifecycle()
+    val playbackQueue by playbackViewModel.queue.collectAsStateWithLifecycle()
 
-    var selectedTab by remember { mutableStateOf(AppTab.Home) }
-    var selectedPlaylistForDetail by remember { mutableStateOf<com.musica.paralosoidos.data.MusicPlaylist?>(null) }
-    var showAddTracksDialog by remember { mutableStateOf(false) }
+    var selectedTabName by rememberSaveable { mutableStateOf(AppTab.Home.name) }
+    val selectedTab = runCatching { AppTab.valueOf(selectedTabName) }.getOrDefault(AppTab.Home)
+    var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedPlaylistForDetail = playlists.firstOrNull { it.id == selectedPlaylistId }
+    var showAddTracksDialog by rememberSaveable { mutableStateOf(false) }
     var pendingImportPlan by remember { mutableStateOf<PlaylistImportPlan?>(null) }
     var audioOutputProfileMessage by remember { mutableStateOf<String?>(null) }
-    var showPlayer by remember { mutableStateOf(false) }
+    var showPlayer by rememberSaveable { mutableStateOf(false) }
     var themeMessage by remember { mutableStateOf<String?>(null) }
 
-    var showNewPlaylistDialog by remember { mutableStateOf(false) }
-    var newPlaylistName by remember { mutableStateOf("") }
+    var showNewPlaylistDialog by rememberSaveable { mutableStateOf(false) }
+    var newPlaylistName by rememberSaveable { mutableStateOf("") }
     var playlistMessage by remember { mutableStateOf<String?>(null) }
+    val autoBackupMessage by container.autoBackup.lastMessage.collectAsStateWithLifecycle()
 
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    LaunchedEffect(autoBackupMessage) {
+        autoBackupMessage?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            container.autoBackup.clearMessage()
+        }
+    }
     val exportTrackNames = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
     ) { uri ->
@@ -272,8 +283,8 @@ fun MusicaRoot(
             }
         }
     }
-    val storedOutputProfileId by container.audioOutputProfileSettings.profileId.collectAsState(
-        initial = AudioOutputProfileIds.STUDIO_MONITOR
+    val storedOutputProfileId by container.audioOutputProfileSettings.profileId.collectAsStateWithLifecycle(
+        initialValue = AudioOutputProfileIds.STUDIO_MONITOR
     )
     val tracksByIdLong = remember(tracks) { tracks.associateBy { it.id } }
     val audioGranted = hasAudioPermission()
@@ -368,7 +379,7 @@ fun MusicaRoot(
                         NavigationBarItem(
                             selected = selectedTab == tab,
                             onClick = {
-                                selectedTab = tab
+                                selectedTabName = tab.name
                                 showPlayer = false
                             },
                             icon = { Icon(icon, contentDescription = null) },
@@ -605,13 +616,13 @@ fun MusicaRoot(
                     }
 
                     if (librarySubTab == "Listas") {
-                        val activePlaylist = playlists.firstOrNull { it.id == selectedPlaylistForDetail?.id } ?: selectedPlaylistForDetail
+                        val activePlaylist = selectedPlaylistForDetail
                         if (activePlaylist != null) {
                             item {
                                 PlaylistDetailHeader(
                                     playlist = activePlaylist,
                                     allTracksById = tracksByIdLong,
-                                    onBack = { selectedPlaylistForDetail = null },
+                                    onBack = { selectedPlaylistId = null },
                                     onPlayAll = { playlistTracks ->
                                         if (playlistTracks.isNotEmpty()) playbackViewModel.playTrack(playlistTracks.first(), playlistTracks)
                                     },
@@ -624,7 +635,7 @@ fun MusicaRoot(
                                     onAddSongsClick = { showAddTracksDialog = true },
                                     onDeletePlaylist = {
                                         libraryViewModel.deletePlaylist(activePlaylist.id) { message ->
-                                            selectedPlaylistForDetail = null
+                                            selectedPlaylistId = null
                                             playlistMessage = message
                                         }
                                     }
@@ -712,7 +723,7 @@ fun MusicaRoot(
                                     PlaylistGalleryCard(
                                         playlist = playlist,
                                         allTracksById = tracksByIdLong,
-                                        onClick = { selectedPlaylistForDetail = playlist },
+                                        onClick = { selectedPlaylistId = playlist.id },
                                         onPlay = { plTracks ->
                                             if (plTracks.isNotEmpty()) playbackViewModel.playTrack(plTracks.first(), plTracks)
                                         }
@@ -977,7 +988,7 @@ fun MusicaRoot(
                 val updatedPlaylist = activePl.copy(trackIds = updatedIds)
                 libraryViewModel.upsertPlaylist(updatedPlaylist) { success, message ->
                     if (success) {
-                        selectedPlaylistForDetail = updatedPlaylist
+                        selectedPlaylistId = updatedPlaylist.id
                         showAddTracksDialog = false
                         playlistMessage = "Se añadieron ${addedTracks.size} canciones a '${activePl.name}'."
                     } else {

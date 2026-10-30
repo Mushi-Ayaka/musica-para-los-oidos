@@ -1,6 +1,7 @@
 package com.musica.paralosoidos.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -76,6 +77,10 @@ class AppPreferences(context: Context) {
         preferences[LYRICS_FOLDER_KEY]
     }
 
+    val autoRestoreDone: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[AUTO_RESTORE_DONE_KEY] ?: false
+    }
+
     suspend fun saveThemeSettings(settings: ThemeSettingsState) {
         require(settings.cornerRadiusDp in 8..32) { "El radio de esquina debe estar entre 8 y 32 dp." }
         require(settings.blurDp in 0..40) { "El desenfoque debe estar entre 0 y 40 dp." }
@@ -120,6 +125,12 @@ class AppPreferences(context: Context) {
         }
     }
 
+    suspend fun markAutoRestoreDone() {
+        dataStore.edit { preferences ->
+            preferences[AUTO_RESTORE_DONE_KEY] = true
+        }
+    }
+
     suspend fun saveLyricsFolder(uri: String?) {
         dataStore.edit { preferences ->
             if (uri.isNullOrBlank()) {
@@ -135,6 +146,7 @@ class AppPreferences(context: Context) {
         val EQ_PRESETS_KEY = stringPreferencesKey("custom_eq_presets")
         val PLAYLISTS_KEY = stringPreferencesKey("playlists")
         val LYRICS_FOLDER_KEY = stringPreferencesKey("lyrics_folder_uri")
+        val AUTO_RESTORE_DONE_KEY = booleanPreferencesKey("auto_restore_done")
         val HEX_COLOR_PATTERN = Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
         val SUPPORTED_FONT_FAMILIES = setOf("jakarta", "system", "serif", "mono")
     }

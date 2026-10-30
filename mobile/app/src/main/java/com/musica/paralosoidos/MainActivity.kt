@@ -16,7 +16,7 @@ import com.musica.paralosoidos.playback.PlaybackService
 import com.musica.paralosoidos.ui.MusicaRoot
 import com.musica.paralosoidos.ui.theme.MusicaTheme
 import com.google.common.util.concurrent.ListenableFuture
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -45,8 +45,8 @@ class MainActivity : ComponentActivity() {
 
         val container = (application as MusicaApp).container
         setContent {
-            val themeSettings by container.preferences.themeSettings.collectAsState(
-                initial = com.musica.paralosoidos.data.ThemeSettingsState()
+            val themeSettings by container.preferences.themeSettings.collectAsStateWithLifecycle(
+                initialValue = com.musica.paralosoidos.data.ThemeSettingsState()
             )
             MusicaTheme(settings = themeSettings) {
                 MusicaRoot(

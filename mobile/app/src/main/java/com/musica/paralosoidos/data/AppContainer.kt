@@ -42,6 +42,11 @@ class AppContainer(context: Context) {
     val downloadSettings = DownloadSettings(context)
     val audioOutputProfileSettings = AudioOutputProfileSettings(context)
     val preferences = AppPreferences(context)
+    val autoBackup = AutoBackupManager(context, preferences, tracks)
+
+    init {
+        autoBackup.start()
+    }
     private val backupState = database.backupStateDao()
     private val resolver = context.contentResolver
     @Volatile private var lastLibraryRefreshAt = 0L
@@ -57,6 +62,7 @@ class AppContainer(context: Context) {
             relinkBackupTracks(found)
         }
         lastLibraryRefreshAt = SystemClock.elapsedRealtime()
+        runCatching { autoBackup.restoreIfNeeded() }
     }
 
     private fun queryLocalAudio(): List<TrackEntity> {

@@ -19,19 +19,6 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
 
-enum class SortOrder(val label: String) {
-    AZ("A-Z"),
-    ZA("Z-A"),
-    Recent("Recientes")
-}
-
-private data class SearchableTrack(
-    val track: TrackEntity,
-    val title: String,
-    val artist: String,
-    val album: String
-)
-
 class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() {
     val tracks: StateFlow<List<TrackEntity>> = repository.tracks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -60,42 +47,15 @@ class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() 
     private val _scanMessage = MutableStateFlow<String?>(null)
     val scanMessage: StateFlow<String?> = _scanMessage.asStateFlow()
 
-    private val searchableTracks = tracks.map { list ->
-        list.map {
-            SearchableTrack(
-                track = it,
-                title = it.title.lowercase(Locale.ROOT),
-                artist = it.artist.lowercase(Locale.ROOT),
-                album = it.album.lowercase(Locale.ROOT)
-            )
-        }
-    }
+    private val indexedTracks = tracks.map(TrackFilter::index)
 
     val filteredTracks: StateFlow<List<TrackEntity>> = combine(
-        searchableTracks,
+        indexedTracks,
         _searchQuery,
         _sortOrder,
         _letterFilter
     ) { source, query, order, letter ->
-        var result = source
-        if (query.isNotBlank()) {
-            val q = query.trim().lowercase(Locale.ROOT)
-            result = result.filter {
-                it.title.contains(q) || it.artist.contains(q) || it.album.contains(q)
-            }
-        }
-        if (letter != null) {
-            result = if (letter == '#') {
-                result.filter { it.track.title.firstOrNull()?.isLetter() != true }
-            } else {
-                result.filter { it.track.title.startsWith(letter, ignoreCase = true) }
-            }
-        }
-        when (order) {
-            SortOrder.AZ -> result.sortedBy { it.title }
-            SortOrder.ZA -> result.sortedByDescending { it.title }
-            SortOrder.Recent -> result
-        }.map { it.track }
+        TrackFilter.apply(source, query, order, letter)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val albums: StateFlow<List<Pair<String, List<TrackEntity>>>> = tracks.map { list ->
