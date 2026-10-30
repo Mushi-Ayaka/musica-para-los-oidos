@@ -16,6 +16,7 @@ import com.musica.paralosoidos.ui.components.ThemeSettingsSection
 import com.musica.paralosoidos.ui.components.TrackRow
 import com.musica.paralosoidos.ui.equalizer.EqualizerScreenContent
 import com.musica.paralosoidos.ui.player.FullPlayer
+import com.musica.paralosoidos.ui.player.PlaybackViewModel
 import com.musica.paralosoidos.ui.player.MiniPlayer
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -200,23 +201,23 @@ fun MusicaRoot(
     val filteredTracks by libraryViewModel.filteredTracks.collectAsState()
     val albums by libraryViewModel.albums.collectAsState()
 
+    val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container))
+    val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
+    val isPlaying by playbackViewModel.isPlaying.collectAsState()
+    val position by playbackViewModel.position.collectAsState()
+    val duration by playbackViewModel.duration.collectAsState()
+    val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
+    val shuffleEnabled by playbackViewModel.shuffleEnabled.collectAsState()
+    val repeatMode by playbackViewModel.repeatMode.collectAsState()
+    val playbackError by playbackViewModel.playbackError.collectAsState()
+    val playbackQueue by playbackViewModel.queue.collectAsState()
+
     var selectedTab by remember { mutableStateOf(AppTab.Home) }
-    var nowPlaying by remember { mutableStateOf<TrackEntity?>(null) }
-    var isPlaying by remember { mutableStateOf(false) }
-    var position by remember { mutableFloatStateOf(0f) }
-    var duration by remember { mutableFloatStateOf(1f) }
-    var queueRevision by remember { mutableIntStateOf(0) }
-    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
     var selectedPlaylistForDetail by remember { mutableStateOf<com.musica.paralosoidos.data.MusicPlaylist?>(null) }
     var showAddTracksDialog by remember { mutableStateOf(false) }
     var pendingImportPlan by remember { mutableStateOf<PlaylistImportPlan?>(null) }
     var audioOutputProfileMessage by remember { mutableStateOf<String?>(null) }
-
-    var playbackError by remember { mutableStateOf<String?>(null) }
     var showPlayer by remember { mutableStateOf(false) }
-    var shuffleEnabled by remember { mutableStateOf(false) }
-    var repeatMode by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
-
     var themeMessage by remember { mutableStateOf<String?>(null) }
 
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
@@ -274,9 +275,7 @@ fun MusicaRoot(
     val storedOutputProfileId by container.audioOutputProfileSettings.profileId.collectAsState(
         initial = AudioOutputProfileIds.STUDIO_MONITOR
     )
-    val tracksById = remember(tracks) { tracks.associateBy { it.id.toString() } }
     val tracksByIdLong = remember(tracks) { tracks.associateBy { it.id } }
-    val latestTracksById by rememberUpdatedState(tracksById)
     val audioGranted = hasAudioPermission()
 
     LaunchedEffect(customEqPresets) {
@@ -305,80 +304,8 @@ fun MusicaRoot(
     }
 
     DisposableEffect(controller) {
-        if (controller == null) return@DisposableEffect onDispose { }
-        val listener = object : Player.Listener {
-            override fun onEvents(player: Player, events: Player.Events) {
-                if (events.contains(Player.EVENT_TIMELINE_CHANGED) ||
-                    events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
-                ) {
-                    queueRevision++
-                    nowPlaying = latestTracksById[player.currentMediaItem?.mediaId]
-                }
-                if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
-                    isPlaying = player.isPlaying
-                }
-                if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
-                    duration = player.duration.takeIf { it > 0L }?.toFloat() ?: 1f
-                }
-                if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)) {
-                    position = player.currentPosition.coerceAtLeast(0L).toFloat()
-                }
-                if (events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) {
-                    shuffleEnabled = player.shuffleModeEnabled
-                }
-                if (events.contains(Player.EVENT_REPEAT_MODE_CHANGED)) {
-                    repeatMode = player.repeatMode
-                }
-                if (events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED)) {
-                    playbackSpeed = player.playbackParameters.speed
-                }
-            }
-
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                playbackError = error.localizedMessage ?: "No se pudo reproducir este archivo."
-                isPlaying = false
-            }
-        }
-        controller.addListener(listener)
-        nowPlaying = latestTracksById[controller.currentMediaItem?.mediaId]
-        isPlaying = controller.isPlaying
-        position = controller.currentPosition.coerceAtLeast(0L).toFloat()
-        duration = controller.duration.takeIf { it > 0L }?.toFloat() ?: 1f
-        shuffleEnabled = controller.shuffleModeEnabled
-        repeatMode = controller.repeatMode
-        playbackSpeed = controller.playbackParameters.speed
-        onDispose { controller.removeListener(listener) }
-    }
-
-    LaunchedEffect(controller, isPlaying) {
-        while (true) {
-            if (isPlaying) {
-                position = controller?.currentPosition?.coerceAtLeast(0L)?.toFloat() ?: 0f
-                duration = controller?.duration?.takeIf { it > 0L }?.toFloat() ?: 1f
-            }
-            delay(500)
-        }
-    }
-
-    fun playTrack(track: TrackEntity, customQueue: List<TrackEntity> = tracks) {
-        if (controller == null) {
-            playbackError = "El reproductor aún se está iniciando. Inténtalo de nuevo."
-            return
-        }
-        playbackError = null
-        val queue = customQueue.map(::mediaItemFor)
-        val index = customQueue.indexOf(track).coerceAtLeast(0)
-        controller.setMediaItems(queue, index, 0L)
-        controller.prepare()
-        controller.play()
-    }
-
-    val playbackQueue = remember(tracksById, controller, queueRevision) {
-        controller?.let { player ->
-            (0 until player.mediaItemCount).mapNotNull { index ->
-                tracksById[player.getMediaItemAt(index).mediaId]
-            }
-        }.orEmpty()
+        if (controller != null) playbackViewModel.attachController(controller)
+        onDispose { playbackViewModel.detachController() }
     }
 
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
@@ -422,10 +349,8 @@ fun MusicaRoot(
                         track = track,
                         playing = isPlaying,
                         onOpen = { showPlayer = true },
-                        onPlayPause = {
-                            if (controller?.isPlaying == true) controller.pause() else controller?.play()
-                        },
-                        onNext = { controller?.seekToNextMediaItem() },
+                        onPlayPause = { playbackViewModel.togglePlayPause() },
+                        onNext = { playbackViewModel.next() },
                         progress = { (position / duration).coerceIn(0f, 1f) }
                     )
                 }
@@ -504,7 +429,7 @@ fun MusicaRoot(
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { playTrack(featuredTrack) },
+                                    .clickable { playbackViewModel.playTrack(featuredTrack, tracks) },
                                 shape = MusicaStyle.Shape.large,
                                 border = BorderStroke(1.dp, MusicaStyle.Colors.overlay),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -601,7 +526,7 @@ fun MusicaRoot(
                         items(tracks.take(6), key = { "home-${it.id}" }) { track ->
                             TrackRow(
                                 track = track,
-                                onClick = { playTrack(track) }
+                                onClick = { playbackViewModel.playTrack(track, tracks) }
                             )
                         }
                     }
@@ -654,7 +579,7 @@ fun MusicaRoot(
                             items(albums, key = { "album-${it.first}" }) { (albumName, albumTracks) ->
                                 Card(
                                     modifier = Modifier.fillMaxWidth().clickable {
-                                        playTrack(albumTracks.first(), albumTracks)
+                                        playbackViewModel.playTrack(albumTracks.first(), albumTracks)
                                     },
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                                 ) {
@@ -688,12 +613,12 @@ fun MusicaRoot(
                                     allTracksById = tracksByIdLong,
                                     onBack = { selectedPlaylistForDetail = null },
                                     onPlayAll = { playlistTracks ->
-                                        if (playlistTracks.isNotEmpty()) playTrack(playlistTracks.first(), playlistTracks)
+                                        if (playlistTracks.isNotEmpty()) playbackViewModel.playTrack(playlistTracks.first(), playlistTracks)
                                     },
                                     onShuffle = { playlistTracks ->
                                         if (playlistTracks.isNotEmpty()) {
                                             val shuffled = playlistTracks.shuffled()
-                                            playTrack(shuffled.first(), shuffled)
+                                            playbackViewModel.playTrack(shuffled.first(), shuffled)
                                         }
                                     },
                                     onAddSongsClick = { showAddTracksDialog = true },
@@ -730,7 +655,7 @@ fun MusicaRoot(
                                         isCurrent = nowPlaying?.id == track.id,
                                         canMoveUp = trackIndex > 0,
                                         canMoveDown = trackIndex >= 0 && trackIndex < activePlaylist.trackIds.lastIndex,
-                                        onPlay = { playTrack(track, playlistTracks) },
+                                        onPlay = { playbackViewModel.playTrack(track, playlistTracks) },
                                         onMoveUp = {
                                             libraryViewModel.movePlaylistTrack(
                                                 activePlaylist.id,
@@ -789,7 +714,7 @@ fun MusicaRoot(
                                         allTracksById = tracksByIdLong,
                                         onClick = { selectedPlaylistForDetail = playlist },
                                         onPlay = { plTracks ->
-                                            if (plTracks.isNotEmpty()) playTrack(plTracks.first(), plTracks)
+                                            if (plTracks.isNotEmpty()) playbackViewModel.playTrack(plTracks.first(), plTracks)
                                         }
                                     )
                                 }
@@ -902,7 +827,7 @@ fun MusicaRoot(
                         items(filteredTracks, key = { "lib-${it.id}" }) { track ->
                             TrackRow(
                                 track = track,
-                                onClick = { playTrack(track, filteredTracks) }
+                                onClick = { playbackViewModel.playTrack(track, filteredTracks) }
                             )
                         }
                     }
@@ -986,18 +911,12 @@ fun MusicaRoot(
                 shuffleEnabled = shuffleEnabled,
                 repeatMode = repeatMode,
                 playbackSpeed = playbackSpeed,
-                onSpeedChange = { speed ->
-                    playbackSpeed = speed
-                    controller?.setPlaybackSpeed(speed)
-                },
+                onSpeedChange = { speed -> playbackViewModel.setSpeed(speed) },
                 error = playbackError,
-                onSelectQueueItem = { index ->
-                    controller?.seekTo(index, 0L)
-                    controller?.play()
-                },
-                onMoveQueueItem = { from, to -> controller?.moveMediaItem(from, to) },
-                onRemoveQueueItem = { index -> controller?.removeMediaItem(index) },
-                onAddQueueItem = { track -> controller?.addMediaItem(mediaItemFor(track)) },
+                onSelectQueueItem = { index -> playbackViewModel.seekTo(index) },
+                onMoveQueueItem = { from, to -> playbackViewModel.moveQueueItem(from, to) },
+                onRemoveQueueItem = { index -> playbackViewModel.removeQueueItem(index) },
+                onAddQueueItem = { track -> playbackViewModel.addQueueItem(track) },
                 onClose = { showPlayer = false }
             )
         }
@@ -1088,16 +1007,3 @@ fun MusicaRoot(
     }
     }
 }
-
-private fun mediaItemFor(track: TrackEntity): MediaItem =
-    MediaItem.Builder()
-        .setMediaId(track.id.toString())
-        .setUri(track.uri)
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(track.title)
-                .setArtist(track.artist)
-                .setAlbumTitle(track.album)
-                .build()
-        )
-        .build()
