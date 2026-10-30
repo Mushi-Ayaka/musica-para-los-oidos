@@ -231,7 +231,7 @@ class AutoBackupManager(
 
     private companion object {
         const val FOLDER = "MusicaParaLosOidos"
-        const val FOLDER_PATH = "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER"
+        val FOLDER_PATH = "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER"
         const val CURRENT_FILE = "musica-para-los-oidos-backup.json"
         const val PREVIOUS_FILE = "musica-para-los-oidos-backup-anterior.json"
     }
