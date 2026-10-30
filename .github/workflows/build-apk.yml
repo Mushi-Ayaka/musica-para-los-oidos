@@ -68,7 +68,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: Música para los Oídos ${{ github.ref_name }}
-          prerelease: true
+          prerelease: false
           generate_release_notes: true
           files: Musica-para-los-Oidos-${{ github.ref_name }}-arm64-release.apk
           body: |
