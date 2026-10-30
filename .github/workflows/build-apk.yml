@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: Build and test native Android app
+    name: Build, test and sign release
     runs-on: ubuntu-latest
 
     steps:
@@ -34,33 +34,46 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Decode release keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          chmod 600 "$RUNNER_TEMP/release.p12"
+
       - name: Make Gradle wrapper executable
         run: chmod +x mobile/gradlew
 
-      - name: Build and test
+      - name: Build, test and sign
         working-directory: mobile
-        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon
+        env:
+          RELEASE_KEYSTORE_FILE: ${{ runner.temp }}/release.p12
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon
 
-      - name: Prepare ARM64 test APK
-        run: cp mobile/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk Musica-para-los-Oidos-${GITHUB_REF_NAME}-arm64.apk
+      - name: Prepare ARM64 release APK
+        run: cp mobile/app/build/outputs/apk/release/app-arm64-v8a-release.apk Musica-para-los-Oidos-${GITHUB_REF_NAME}-arm64-release.apk
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Musica-para-los-Oidos-${{ github.ref_name }}-arm64
-          path: Musica-para-los-Oidos-${{ github.ref_name }}-arm64.apk
+          name: Musica-para-los-Oidos-${{ github.ref_name }}-arm64-release
+          path: Musica-para-los-Oidos-${{ github.ref_name }}-arm64-release.apk
           retention-days: 30
 
       - name: Publish prerelease
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: Música para los Oídos ${{ github.ref_name }} — pruebas
+          name: Música para los Oídos ${{ github.ref_name }}
           prerelease: true
           generate_release_notes: true
-          files: Musica-para-los-Oidos-${{ github.ref_name }}-arm64.apk
+          files: Musica-para-los-Oidos-${{ github.ref_name }}-arm64-release.apk
           body: |
-            APK Android nativo de pruebas, compilado desde Kotlin, Jetpack Compose y Media3.
+            APK Android nativo (release, no debug) compilado desde Kotlin, Jetpack Compose y Media3.
 
-            Este APK está firmado con la clave de depuración de Android; no es una versión de producción.
-            La app reproduce archivos locales y no incluye rastreador ni descargador de YouTube.
+            - Firmado con clave release propia.
+            - Optimizado con R8 y reducción de recursos.
+            - Reproduce archivos locales; sin rastreadores ni descargadores de YouTube.

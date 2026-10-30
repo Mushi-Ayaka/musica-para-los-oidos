@@ -40,7 +40,7 @@ object ThemePresetCatalog {
                 mutedTextColor = "#d8b4fe",
                 cornerRadiusDp = 16,
                 fontFamily = "system",
-                wallpaperUri = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80",
+                wallpaperUri = "android.resource://com.musica.paralosoidos/drawable/wallpaper_abstract",
                 blurDp = 24,
                 dimAmount = 0.85f
             )
@@ -62,7 +62,7 @@ object ThemePresetCatalog {
                 mutedTextColor = "#d6d3d1",
                 cornerRadiusDp = 20,
                 fontFamily = "jakarta",
-                wallpaperUri = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200&auto=format&fit=crop&q=80",
+                wallpaperUri = "android.resource://com.musica.paralosoidos/drawable/wallpaper_wood",
                 blurDp = 20,
                 dimAmount = 0.88f
             )
@@ -113,9 +113,9 @@ object ThemePresetCatalog {
 
     val wallpapers = listOf(
         WallpaperPreset("none", "Sin imagen", ""),
-        WallpaperPreset("galaxy", "Nebulosa espacial", "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80"),
-        WallpaperPreset("wood", "Madera y acústica", "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200&auto=format&fit=crop&q=80"),
-        WallpaperPreset("abstract", "Ondas abstractas", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80"),
-        WallpaperPreset("ocean", "Océano nocturno", "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&auto=format&fit=crop&q=80")
+        WallpaperPreset("galaxy", "Nebulosa espacial", "android.resource://com.musica.paralosoidos/drawable/wallpaper_galaxy"),
+        WallpaperPreset("wood", "Madera y acústica", "android.resource://com.musica.paralosoidos/drawable/wallpaper_wood"),
+        WallpaperPreset("abstract", "Ondas abstractas", "android.resource://com.musica.paralosoidos/drawable/wallpaper_abstract"),
+        WallpaperPreset("ocean", "Océano nocturno", "android.resource://com.musica.paralosoidos/drawable/wallpaper_ocean")
     )
 }

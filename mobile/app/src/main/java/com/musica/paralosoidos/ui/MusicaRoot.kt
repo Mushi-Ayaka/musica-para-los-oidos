@@ -1,5 +1,9 @@
 package com.musica.paralosoidos.ui
 
+import java.util.Locale
+
+import com.musica.paralosoidos.ui.theme.MusicaStyle
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -27,7 +31,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -167,6 +170,13 @@ private enum class SortOrder(val label: String) {
     Recent("Recientes")
 }
 
+private data class SearchableTrack(
+    val track: TrackEntity,
+    val title: String,
+    val artist: String,
+    val album: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MusicaRoot(
@@ -261,6 +271,7 @@ fun MusicaRoot(
         initial = AudioOutputProfileIds.STUDIO_MONITOR
     )
     val tracksById = remember(tracks) { tracks.associateBy { it.id.toString() } }
+    val tracksByIdLong = remember(tracks) { tracks.associateBy { it.id } }
     val latestTracksById by rememberUpdatedState(tracksById)
     val audioGranted = hasAudioPermission()
 
@@ -369,34 +380,42 @@ fun MusicaRoot(
         }.orEmpty()
     }
 
-    // Filtrar y ordenar pistas de biblioteca
+    // Filtrar y ordenar pistas de biblioteca con texto ya normalizado.
+    val searchableTracks = remember(tracks) {
+        tracks.map {
+            SearchableTrack(
+                track = it,
+                title = it.title.lowercase(Locale.ROOT),
+                artist = it.artist.lowercase(Locale.ROOT),
+                album = it.album.lowercase(Locale.ROOT)
+            )
+        }
+    }
     val filteredTracks by remember(tracks) {
         derivedStateOf {
-            var result = tracks
+            var result = searchableTracks
 
             if (searchQuery.isNotBlank()) {
-                val q = searchQuery.trim().lowercase()
+                val q = searchQuery.trim().lowercase(Locale.ROOT)
                 result = result.filter {
-                    it.title.lowercase().contains(q) ||
-                    it.artist.lowercase().contains(q) ||
-                    it.album.lowercase().contains(q)
+                    it.title.contains(q) || it.artist.contains(q) || it.album.contains(q)
                 }
             }
 
             if (selectedLetterFilter != null) {
                 val letter = selectedLetterFilter!!
                 result = if (letter == '#') {
-                    result.filter { it.title.firstOrNull()?.isLetter() != true }
+                    result.filter { it.track.title.firstOrNull()?.isLetter() != true }
                 } else {
-                    result.filter { it.title.startsWith(letter, ignoreCase = true) }
+                    result.filter { it.track.title.startsWith(letter, ignoreCase = true) }
                 }
             }
 
             when (currentSortOrder) {
-                SortOrder.AZ -> result.sortedBy { it.title.lowercase() }
-                SortOrder.ZA -> result.sortedByDescending { it.title.lowercase() }
+                SortOrder.AZ -> result.sortedBy { it.title }
+                SortOrder.ZA -> result.sortedByDescending { it.title }
                 SortOrder.Recent -> result
-            }
+            }.map { it.track }
         }
     }
 
@@ -530,8 +549,8 @@ fun MusicaRoot(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { playTrack(featuredTrack) },
-                                shape = RoundedCornerShape(20.dp),
-                                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                                shape = MusicaStyle.Shape.large,
+                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                             ) {
                                 Column(Modifier.fillMaxWidth().padding(14.dp)) {
@@ -539,7 +558,7 @@ fun MusicaRoot(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(180.dp)
-                                            .clip(RoundedCornerShape(14.dp))
+                                            .clip(MusicaStyle.Shape.row)
                                     ) {
                                         if (featuredTrack.artworkUri != null) {
                                             AsyncImage(
@@ -570,7 +589,7 @@ fun MusicaRoot(
                                                 .fillMaxSize()
                                                 .background(
                                                     Brush.verticalGradient(
-                                                        colors = listOf(Color.Transparent, Color(0xCC000000))
+                                                        colors = listOf(Color.Transparent, MusicaStyle.Colors.scrim)
                                                     )
                                                 )
                                         )
@@ -724,7 +743,7 @@ fun MusicaRoot(
                             item {
                                 PlaylistDetailHeader(
                                     playlist = activePlaylist,
-                                    allTracks = tracks,
+                                    allTracksById = tracksByIdLong,
                                     onBack = { selectedPlaylistForDetail = null },
                                     onPlayAll = { playlistTracks ->
                                         if (playlistTracks.isNotEmpty()) playTrack(playlistTracks.first(), playlistTracks)
@@ -745,7 +764,8 @@ fun MusicaRoot(
                                     }
                                 )
                             }
-                            val playlistTracks = activePlaylist.trackIds.mapNotNull { id -> tracks.firstOrNull { it.id == id } }
+                            val playlistTracks = activePlaylist.trackIds.mapNotNull(tracksByIdLong::get)
+                            val playlistTrackPositions = activePlaylist.trackIds.withIndex().associate { it.value to it.index }
                             if (playlistTracks.isEmpty()) {
                                 item {
                                     Box(
@@ -762,7 +782,7 @@ fun MusicaRoot(
                                 }
                             } else {
                                 items(playlistTracks, key = { "pl-trk-${it.id}" }) { track ->
-                                    val trackIndex = activePlaylist.trackIds.indexOf(track.id)
+                                    val trackIndex = playlistTrackPositions[track.id] ?: 0
                                     PlaylistTrackRow(
                                         index = trackIndex + 1,
                                         track = track,
@@ -839,7 +859,7 @@ fun MusicaRoot(
                                 items(playlists, key = { "playlist-${it.id}" }) { playlist ->
                                     PlaylistGalleryCard(
                                         playlist = playlist,
-                                        allTracks = tracks,
+                                        allTracksById = tracksByIdLong,
                                         onClick = { selectedPlaylistForDetail = playlist },
                                         onPlay = { plTracks ->
                                             if (plTracks.isNotEmpty()) playTrack(plTracks.first(), plTracks)
@@ -867,10 +887,10 @@ fun MusicaRoot(
                                 }
                             },
                             singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = MusicaStyle.Shape.medium,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = Color(0x33FFFFFF),
+                                unfocusedBorderColor = MusicaStyle.Colors.overlay,
                                 focusedContainerColor = MaterialTheme.colorScheme.surface,
                                 unfocusedContainerColor = MaterialTheme.colorScheme.surface
                             )
@@ -910,7 +930,7 @@ fun MusicaRoot(
                                     onClick = { selectedLetterFilter = null },
                                     label = { Text("Todos", fontSize = 11.sp) },
                                     colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = if (selectedLetterFilter == null) MaterialTheme.colorScheme.primary else Color(0x1AFFFFFF),
+                                        containerColor = if (selectedLetterFilter == null) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.borderStrong,
                                         labelColor = if (selectedLetterFilter == null) Color.Black else Color.White
                                     ),
                                     border = null
@@ -924,7 +944,7 @@ fun MusicaRoot(
                                     },
                                     label = { Text(char.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                                     colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary else Color(0x14FFFFFF),
+                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.border,
                                         labelColor = if (isSelected) Color.Black else Color.White
                                     ),
                                     border = null
@@ -1221,13 +1241,13 @@ private fun TrackRow(
                 contentDescription = "Portada de ${track.album}",
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(10.dp)),
+                    .clip(MusicaStyle.Shape.small),
                 contentScale = ContentScale.Crop
             )
         } else {
             Card(
                 modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(10.dp),
+                shape = MusicaStyle.Shape.small,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1251,20 +1271,20 @@ private fun TrackRow(
 @Composable
 private fun PlaylistGalleryCard(
     playlist: com.musica.paralosoidos.data.MusicPlaylist,
-    allTracks: List<TrackEntity>,
+    allTracksById: Map<Long, TrackEntity>,
     onClick: () -> Unit,
     onPlay: (List<TrackEntity>) -> Unit
 ) {
-    val selectedTracks = remember(playlist.trackIds, allTracks) {
-        playlist.trackIds.mapNotNull { id -> allTracks.firstOrNull { it.id == id } }
+    val selectedTracks = remember(playlist.trackIds, allTracksById) {
+        playlist.trackIds.mapNotNull(allTracksById::get)
     }
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = MusicaStyle.Shape.card,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(1.dp, Color(0x14FFFFFF))
+        border = BorderStroke(1.dp, MusicaStyle.Colors.border)
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -1273,9 +1293,9 @@ private fun PlaylistGalleryCard(
             Box(
                 modifier = Modifier
                     .size(54.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(MusicaStyle.Shape.medium)
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), MusicaStyle.Shape.medium),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1316,15 +1336,15 @@ private fun PlaylistGalleryCard(
 @Composable
 private fun PlaylistDetailHeader(
     playlist: com.musica.paralosoidos.data.MusicPlaylist,
-    allTracks: List<TrackEntity>,
+    allTracksById: Map<Long, TrackEntity>,
     onBack: () -> Unit,
     onPlayAll: (List<TrackEntity>) -> Unit,
     onShuffle: (List<TrackEntity>) -> Unit,
     onAddSongsClick: () -> Unit,
     onDeletePlaylist: () -> Unit
 ) {
-    val selectedTracks = remember(playlist.trackIds, allTracks) {
-        playlist.trackIds.mapNotNull { id -> allTracks.firstOrNull { it.id == id } }
+    val selectedTracks = remember(playlist.trackIds, allTracksById) {
+        playlist.trackIds.mapNotNull(allTracksById::get)
     }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -1350,7 +1370,7 @@ private fun PlaylistDetailHeader(
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = MusicaStyle.Shape.card,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Row(
@@ -1360,7 +1380,7 @@ private fun PlaylistDetailHeader(
                 Box(
                     modifier = Modifier
                         .size(72.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(MusicaStyle.Shape.row)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1456,7 +1476,7 @@ private fun PlaylistTrackRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(MusicaStyle.Shape.tiny)
             .clickable(onClick = onPlay)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1560,7 +1580,7 @@ private fun AddTracksToPlaylistDialog(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(MusicaStyle.Shape.tiny)
                                 .clickable {
                                     selectedIds = if (isChecked) selectedIds - track.id else selectedIds + track.id
                                 }
@@ -1636,7 +1656,7 @@ private fun PlaylistImportConflictDialog(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = MusicaStyle.Shape.small
                         ) {
                             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(conflict.songTitle, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
@@ -1645,7 +1665,7 @@ private fun PlaylistImportConflictDialog(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(6.dp))
+                                            .clip(MusicaStyle.Shape.micro)
                                             .clickable {
                                                 chosenSelections = chosenSelections + (conflict.songTitle to candidate.id)
                                             }
@@ -1728,16 +1748,16 @@ private fun MiniPlayer(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = MusicaStyle.Shape.card,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-        border = BorderStroke(1.dp, Color(0x33FFFFFF))
+        border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
     ) {
         Column {
             LinearProgressIndicator(
                 progress = progress,
                 modifier = Modifier.fillMaxWidth().height(2.5.dp),
                 color = MaterialTheme.colorScheme.primary,
-                trackColor = Color(0x1AFFFFFF)
+                trackColor = MusicaStyle.Colors.borderStrong
             )
             Row(
                 Modifier
@@ -1751,14 +1771,14 @@ private fun MiniPlayer(
                         contentDescription = null,
                         modifier = Modifier
                             .size(42.dp)
-                            .clip(RoundedCornerShape(8.dp)),
+                            .clip(MusicaStyle.Shape.tiny),
                         contentScale = ContentScale.Crop
                     )
                 } else {
                     Card(
                         modifier = Modifier.size(42.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0x1AFFFFFF))
+                        shape = MusicaStyle.Shape.tiny,
+                        colors = CardDefaults.cardColors(containerColor = MusicaStyle.Colors.borderStrong)
                     ) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
@@ -1828,9 +1848,9 @@ private fun FullPlayer(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Card(
                         modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 8.dp),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = MusicaStyle.Shape.sheet,
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.dp, Color(0x33FFFFFF))
+                        border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
                     ) {
                         if (track.artworkUri != null) {
                             AsyncImage(
@@ -1938,9 +1958,9 @@ private fun FullPlayer(
             Box {
                 Surface(
                     onClick = { speedExpanded = true },
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0x1AFFFFFF),
-                    border = BorderStroke(1.dp, Color(0x26FFFFFF))
+                    shape = MusicaStyle.Shape.tiny,
+                    color = MusicaStyle.Colors.borderStrong,
+                    border = BorderStroke(1.dp, MusicaStyle.Colors.overlaySoft)
                 ) {
                     Row(
                         Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -1954,7 +1974,7 @@ private fun FullPlayer(
                 DropdownMenu(
                     expanded = speedExpanded,
                     onDismissRequest = { speedExpanded = false },
-                    modifier = Modifier.background(Color(0xFF141024))
+                    modifier = Modifier.background(MusicaStyle.Colors.menuBackground)
                 ) {
                     listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
                         DropdownMenuItem(
@@ -1992,13 +2012,14 @@ private fun FullPlayer(
         OutlinedButton(onClick = { showAddTracks = !showAddTracks }) {
             Text(if (showAddTracks) "Ocultar pistas" else "Añadir pistas a la cola")
         }
+        val queuePositions = remember(queue) { queue.withIndex().associate { it.value.id to it.index } }
         if (showAddTracks) {
             val queueIds = queue.mapTo(mutableSetOf()) { it.id }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(allTracks.filterNot { it.id in queueIds }, key = { "add-${it.id}" }) { candidate ->
                     Surface(
                         onClick = { onAddQueueItem(candidate) },
-                        shape = RoundedCornerShape(10.dp),
+                        shape = MusicaStyle.Shape.small,
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
                         Text(
@@ -2043,7 +2064,7 @@ private fun FullPlayer(
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val index = queue.indexOfFirst { it.id == queued.id }
+                    val index = queuePositions[queued.id] ?: 0
                     Column(
                         Modifier.weight(1f).clickable { onSelectQueueItem(index) }.padding(vertical = 6.dp)
                     ) {
@@ -2203,10 +2224,10 @@ private fun EqualizerScreenContent(
             // Pill toggle button matching web prototype style
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(MusicaStyle.Shape.pill)
                     .background(
                         if (isEnabled) MaterialTheme.colorScheme.primary
-                        else Color(0x1AFFFFFF)
+                        else MusicaStyle.Colors.borderStrong
                     )
                     .clickable { AudioEffectsManager.setEnabled(!isEnabled) }
                     .padding(horizontal = 14.dp, vertical = 6.dp)
@@ -2224,8 +2245,8 @@ private fun EqualizerScreenContent(
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(Color(0x0DFFFFFF), RoundedCornerShape(14.dp))
-                .border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(14.dp))
+                .background(MusicaStyle.Colors.divider, MusicaStyle.Shape.row)
+                .border(1.dp, MusicaStyle.Colors.border, MusicaStyle.Shape.row)
                 .padding(12.dp)
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -2236,7 +2257,7 @@ private fun EqualizerScreenContent(
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .background(Color(0x26FFFFFF), RoundedCornerShape(6.dp))
+                        .background(MusicaStyle.Colors.overlaySoft, MusicaStyle.Shape.micro)
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
@@ -2250,7 +2271,7 @@ private fun EqualizerScreenContent(
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
                     activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = Color(0x1AFFFFFF)
+                    inactiveTrackColor = MusicaStyle.Colors.borderStrong
                 )
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -2264,8 +2285,8 @@ private fun EqualizerScreenContent(
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(Color(0x0DFFFFFF), RoundedCornerShape(14.dp))
-                .border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(14.dp))
+                .background(MusicaStyle.Colors.divider, MusicaStyle.Shape.row)
+                .border(1.dp, MusicaStyle.Colors.border, MusicaStyle.Shape.row)
                 .padding(12.dp)
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -2277,9 +2298,9 @@ private fun EqualizerScreenContent(
                     if (speakerBoost > 0) "$speakerBoost% (+${speakerBoost / 5} dB)" else "0%",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = if (speakerBoost > 0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (speakerBoost > 0) MusicaStyle.Colors.gold else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
-                        .background(Color(0x26FFFFFF), RoundedCornerShape(6.dp))
+                        .background(MusicaStyle.Colors.overlaySoft, MusicaStyle.Shape.micro)
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
@@ -2288,24 +2309,24 @@ private fun EqualizerScreenContent(
                 onValueChange = { AudioEffectsManager.setSpeakerBoost(it.toInt()) },
                 valueRange = 0f..100f,
                 colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFFF59E0B),
-                    activeTrackColor = Color(0xFFF59E0B),
-                    inactiveTrackColor = Color(0x1AFFFFFF)
+                    thumbColor = MusicaStyle.Colors.gold,
+                    activeTrackColor = MusicaStyle.Colors.gold,
+                    inactiveTrackColor = MusicaStyle.Colors.borderStrong
                 )
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("0% (Apagado)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("50% (+10 dB)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("100% (+20 dB)", fontSize = 10.sp, color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold)
+                Text("100% (+20 dB)", fontSize = 10.sp, color = MusicaStyle.Colors.gold, fontWeight = FontWeight.Bold)
             }
         }
 
         // Selector de Presets (Dropdown tipo Web)
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, Color(0x14FFFFFF)),
-            colors = CardDefaults.cardColors(containerColor = Color(0x0DFFFFFF))
+            shape = MusicaStyle.Shape.row,
+            border = BorderStroke(1.dp, MusicaStyle.Colors.border),
+            colors = CardDefaults.cardColors(containerColor = MusicaStyle.Colors.divider)
         ) {
             Row(
                 Modifier
@@ -2319,9 +2340,9 @@ private fun EqualizerScreenContent(
                 Box {
                     Surface(
                         onClick = { presetMenuExpanded = true },
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF141024),
-                        border = BorderStroke(1.dp, Color(0x38FFFFFF))
+                        shape = MusicaStyle.Shape.small,
+                        color = MusicaStyle.Colors.menuBackground,
+                        border = BorderStroke(1.dp, MusicaStyle.Colors.overlayMedium)
                     ) {
                         Row(
                             Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -2346,7 +2367,7 @@ private fun EqualizerScreenContent(
                     DropdownMenu(
                         expanded = presetMenuExpanded,
                         onDismissRequest = { presetMenuExpanded = false },
-                        modifier = Modifier.background(Color(0xFF18142A))
+                        modifier = Modifier.background(MusicaStyle.Colors.menuBackgroundAlt)
                     ) {
                         (AudioEffectsManager.presets.keys.toList() + "Personalizado").distinct().forEach { preset ->
                             DropdownMenuItem(
@@ -2382,12 +2403,12 @@ private fun EqualizerScreenContent(
                 placeholder = { Text("Nombre para guardar preset...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                shape = RoundedCornerShape(10.dp),
+                shape = MusicaStyle.Shape.small,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color(0x1AFFFFFF),
-                    focusedContainerColor = Color(0x0DFFFFFF),
-                    unfocusedContainerColor = Color(0x0DFFFFFF)
+                    unfocusedBorderColor = MusicaStyle.Colors.borderStrong,
+                    focusedContainerColor = MusicaStyle.Colors.divider,
+                    unfocusedContainerColor = MusicaStyle.Colors.divider
                 )
             )
             Button(
@@ -2398,7 +2419,7 @@ private fun EqualizerScreenContent(
                         newPresetName = ""
                     }
                 },
-                shape = RoundedCornerShape(10.dp),
+                shape = MusicaStyle.Shape.small,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Icon(Icons.Default.Save, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
@@ -2410,9 +2431,9 @@ private fun EqualizerScreenContent(
         // Faders Card (10 bandas con controles nativos)
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, Color(0x14FFFFFF)),
-            colors = CardDefaults.cardColors(containerColor = Color(0x0DFFFFFF))
+            shape = MusicaStyle.Shape.row,
+            border = BorderStroke(1.dp, MusicaStyle.Colors.border),
+            colors = CardDefaults.cardColors(containerColor = MusicaStyle.Colors.divider)
         ) {
             Column(Modifier.padding(12.dp)) {
                 Text(
@@ -2463,8 +2484,8 @@ private fun EqualizerScreenContent(
                 Column(
                     Modifier
                         .weight(1f)
-                        .background(Color(0x0DFFFFFF), RoundedCornerShape(14.dp))
-                        .border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(14.dp))
+                        .background(MusicaStyle.Colors.divider, MusicaStyle.Shape.row)
+                        .border(1.dp, MusicaStyle.Colors.border, MusicaStyle.Shape.row)
                         .padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -2484,7 +2505,7 @@ private fun EqualizerScreenContent(
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,
                             activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = Color(0x1AFFFFFF)
+                            inactiveTrackColor = MusicaStyle.Colors.borderStrong
                         )
                     )
                 }
@@ -2495,8 +2516,8 @@ private fun EqualizerScreenContent(
                 Column(
                     Modifier
                         .weight(1f)
-                        .background(Color(0x0DFFFFFF), RoundedCornerShape(14.dp))
-                        .border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(14.dp))
+                        .background(MusicaStyle.Colors.divider, MusicaStyle.Shape.row)
+                        .border(1.dp, MusicaStyle.Colors.border, MusicaStyle.Shape.row)
                         .padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -2516,7 +2537,7 @@ private fun EqualizerScreenContent(
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,
                             activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = Color(0x1AFFFFFF)
+                            inactiveTrackColor = MusicaStyle.Colors.borderStrong
                         )
                     )
                 }
@@ -2539,13 +2560,13 @@ private fun EqualizerScreenContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOutputProfileSelected(profile.id) },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = MusicaStyle.Shape.row,
                         border = BorderStroke(
                             if (selected) 1.5.dp else 1.dp,
-                            if (selected) MaterialTheme.colorScheme.primary else Color(0x14FFFFFF)
+                            if (selected) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.border
                         ),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (selected) Color(0xFF071E23) else Color(0x0DFFFFFF)
+                            containerColor = if (selected) MusicaStyle.Colors.infoSurface else MusicaStyle.Colors.divider
                         )
                     ) {
                         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {

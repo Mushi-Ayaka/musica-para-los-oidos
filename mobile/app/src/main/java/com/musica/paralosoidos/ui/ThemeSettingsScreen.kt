@@ -1,5 +1,7 @@
 package com.musica.paralosoidos.ui
 
+import com.musica.paralosoidos.ui.theme.MusicaStyle
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.AlertDialog
@@ -78,13 +79,13 @@ fun ThemeSettingsScreen(
                                 )
                             )
                         },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = MusicaStyle.Shape.row,
                     colors = CardDefaults.cardColors(
                         containerColor = Color(android.graphics.Color.parseColor(preset.settings.surfaceColor))
                     ),
                     border = androidx.compose.foundation.BorderStroke(
                         if (selected) 2.dp else 1.dp,
-                        if (selected) MaterialTheme.colorScheme.primary else Color(0x33888888)
+                        if (selected) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.neutralBorder
                     )
                 ) {
                     Column(
@@ -94,7 +95,7 @@ fun ThemeSettingsScreen(
                         Text(preset.name, fontWeight = FontWeight.Bold, color = Color.White)
                         Text(
                             preset.description,
-                            color = Color(0xFFB8B8C2),
+                            color = MusicaStyle.Colors.neutral,
                             fontSize = 10.sp,
                             lineHeight = 14.sp
                         )
@@ -111,10 +112,10 @@ fun ThemeSettingsScreen(
                     modifier = Modifier
                         .size(width = 118.dp, height = 82.dp)
                         .clickable { onSettingsChange(settings.copy(wallpaperUri = wallpaper.uri)) },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MusicaStyle.Shape.medium,
                     border = androidx.compose.foundation.BorderStroke(
                         if (selected) 2.dp else 1.dp,
-                        if (selected) MaterialTheme.colorScheme.primary else Color(0x33888888)
+                        if (selected) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.neutralBorder
                     ),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
@@ -395,9 +396,9 @@ private fun CustomColorPickerDialog(
                         modifier = Modifier
                             .weight(1f)
                             .height(52.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(MusicaStyle.Shape.small)
                             .background(Color(currentColorInt))
-                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp)),
+                            .border(1.dp, MusicaStyle.Colors.overlay, MusicaStyle.Shape.small),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
