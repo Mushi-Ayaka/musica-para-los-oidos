@@ -1,5 +1,6 @@
 package com.musica.paralosoidos.ui
 
+import com.musica.paralosoidos.ui.components.SectionTitle
 import com.musica.paralosoidos.ui.theme.MusicaStyle
 
 import androidx.compose.foundation.background
