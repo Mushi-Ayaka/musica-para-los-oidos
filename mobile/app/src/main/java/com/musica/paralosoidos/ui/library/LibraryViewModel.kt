@@ -103,6 +103,16 @@ class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() 
         }
     }
 
+    fun replacePlaylists(playlists: List<MusicPlaylist>, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            runCatching { repository.savePlaylists(playlists) }
+                .onSuccess { onResult(true, null) }
+                .onFailure {
+                    onResult(false, "No se pudo restaurar la copia: ${it.localizedMessage ?: "error desconocido"}")
+                }
+        }
+    }
+
     fun deletePlaylist(playlistId: String, onMessage: (String?) -> Unit) {
         viewModelScope.launch {
             runCatching {

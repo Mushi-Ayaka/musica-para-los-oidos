@@ -150,6 +150,7 @@ import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import com.musica.paralosoidos.data.AppContainer
 import com.musica.paralosoidos.data.AudioOutputProfileIds
+import com.musica.paralosoidos.data.AutoBackupCodec
 import com.musica.paralosoidos.data.PlaylistTextCodec
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -280,6 +281,40 @@ fun MusicaRoot(
                     }
                 }.onFailure {
                     playlistMessage = "No se pudo importar la lista: ${it.localizedMessage ?: "error desconocido"}"
+                }
+            }
+        }
+    }
+    val restoreBackupFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                runCatching {
+                    val content = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)
+                            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                            ?: error("No se pudo leer la copia seleccionada.")
+                    }
+                    val backup = AutoBackupCodec.decode(content)
+                    val currentTracks = libraryViewModel.tracks.value
+                    val currentPlaylists = libraryViewModel.playlists.value
+                    val restored = AutoBackupCodec.toPlaylists(backup, currentTracks)
+                    val merged = AutoBackupCodec.merge(currentPlaylists, restored)
+                    val added = merged.size - currentPlaylists.size
+                    if (added <= 0) {
+                        playlistMessage = "La copia no añadió listas nuevas."
+                    } else {
+                        libraryViewModel.replacePlaylists(merged) { success, message ->
+                            playlistMessage = if (success) {
+                                "Se restauraron $added listas desde la copia."
+                            } else {
+                                message
+                            }
+                        }
+                    }
+                }.onFailure {
+                    playlistMessage = "No se pudo restaurar la copia: ${it.localizedMessage ?: "error desconocido"}"
                 }
             }
         }
@@ -887,6 +922,33 @@ fun MusicaRoot(
                             ) {
                                 Text("Importar lista desde JSON")
                             }
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        runCatching { container.autoBackup.exportNow() }
+                                            .onSuccess {
+                                                playlistMessage = "Copia guardada en Descargas/MusicaParaLosOidos."
+                                            }
+                                            .onFailure {
+                                                playlistMessage = "No se pudo guardar la copia: ${it.localizedMessage ?: "error desconocido"}"
+                                            }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Exportar copia ahora")
+                            }
+                            OutlinedButton(
+                                onClick = { restoreBackupFile.launch(arrayOf("application/json", "text/*")) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Restaurar copia desde archivo")
+                            }
+                            Text(
+                                "Copia automática: Descargas/MusicaParaLosOidos/musica-para-los-oidos-backup.json",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             Text(
                                 """Formato JSON: {"name":"Favoritas","songs":["Cancion 1","Cancion 2"]}""",
                                 style = MaterialTheme.typography.bodySmall,

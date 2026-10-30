@@ -60,6 +60,7 @@ class AutoBackupManager(
         if (restoreCompleted) return@withLock
         if (preferences.autoRestoreDone.first()) {
             restoreCompleted = true
+            if (readFile(CURRENT_FILE) == null) runCatching { exportNow() }
             return@withLock
         }
 
@@ -96,8 +97,10 @@ class AutoBackupManager(
 
     suspend fun exportNow() {
         val library = tracks.observeAll().first()
+        val playlists = preferences.playlists.first()
+        if (library.isEmpty() && playlists.any { it.trackIds.isNotEmpty() }) return
         val text = AutoBackupCodec.encode(
-            playlists = preferences.playlists.first(),
+            playlists = playlists,
             theme = preferences.themeSettings.first(),
             eqPresets = preferences.customEqPresets.first(),
             library = library,
@@ -192,17 +195,17 @@ class AutoBackupManager(
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
-    private fun findMediaStoreUri(name: String): Uri? {
+    private fun findMediaStoreUri(name: String): Uri? = runCatching {
         val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Downloads._ID)
         val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
         resolver.query(collection, projection, selection, arrayOf(name), null)?.use { cursor ->
             if (cursor.moveToFirst()) {
-                return ContentUris.withAppendedId(collection, cursor.getLong(0))
+                return@runCatching ContentUris.withAppendedId(collection, cursor.getLong(0))
             }
         }
-        return null
-    }
+        null
+    }.getOrNull()
 
     @Suppress("DEPRECATION")
     private fun readFromLegacyStorage(name: String): String? {
