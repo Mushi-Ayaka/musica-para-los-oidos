@@ -7,55 +7,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private val Context.appPreferencesDataStore by preferencesDataStore(name = "app_preferences")
-
-@Serializable
-data class ThemeSettingsState(
-    val presetId: String = "amoled",
-    val backgroundColor: String = "#000000",
-    val surfaceColor: String = "#0a0a0c",
-    val elevatedColor: String = "#131317",
-    val playerBackgroundColor: String = "#0f0f14",
-    val playerAccentColor: String = "#06b6d4",
-    val primaryAccentColor: String = "#06b6d4",
-    val secondaryAccentColor: String = "#8b5cf6",
-    val textColor: String = "#ffffff",
-    val mutedTextColor: String = "#a1a1aa",
-    val cornerRadiusDp: Int = 20,
-    val fontFamily: String = "jakarta",
-    val wallpaperUri: String = "",
-    val blurDp: Int = 16,
-    val dimAmount: Float = 0.8f,
-    val customPresets: List<SavedThemePreset> = emptyList()
-)
-
-@Serializable
-data class SavedThemePreset(
-    val id: String,
-    val name: String,
-    val settings: ThemeSettingsState
-)
-
-@Serializable
-data class SavedEqPreset(
-    val id: String,
-    val name: String,
-    val gainsDb: List<Int>,
-    val bassBoostDb: Int,
-    val virtualizerPercent: Int
-)
-
-@Serializable
-data class MusicPlaylist(
-    val id: String,
-    val name: String,
-    val trackIds: List<Long>
-)
 
 class AppPreferences(context: Context) {
     private val dataStore = context.applicationContext.appPreferencesDataStore

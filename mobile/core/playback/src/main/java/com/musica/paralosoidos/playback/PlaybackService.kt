@@ -8,7 +8,6 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import com.musica.paralosoidos.MainActivity
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
@@ -26,7 +25,7 @@ class PlaybackService : MediaSessionService() {
         }
         AudioEffectsManager.attachSession(player.audioSessionId)
         mediaSession = MediaSession.Builder(this, player)
-            .setSessionActivity(createSessionActivity())
+            .apply { createSessionActivity()?.let { setSessionActivity(it) } }
             .build()
     }
 
@@ -40,10 +39,9 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    private fun createSessionActivity(): PendingIntent {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
+    private fun createSessionActivity(): PendingIntent? {
+        val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+        intent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         return PendingIntent.getActivity(
             this,
             0,

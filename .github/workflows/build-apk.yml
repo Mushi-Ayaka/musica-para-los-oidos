@@ -51,7 +51,7 @@ jobs:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon
+        run: ./gradlew testDebugUnitTest :app:assembleRelease --no-daemon
 
       - name: Prepare ARM64 release APK
         run: cp mobile/app/build/outputs/apk/release/app-arm64-v8a-release.apk Musica-para-los-Oidos-${GITHUB_REF_NAME}-arm64-release.apk

@@ -2,8 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
 }
 
 val releaseKeystoreFile = System.getenv("RELEASE_KEYSTORE_FILE")
@@ -19,8 +17,8 @@ android {
         applicationId = "com.musica.paralosoidos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.1.3"
+        versionCode = 9
+        versionName = "1.1.4"
 
         manifestPlaceholders["appLabel"] = "@string/app_name"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -90,10 +88,6 @@ android {
     }
 }
 
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
@@ -115,15 +109,11 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.ui)
 
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
+    implementation(project(":core:model"))
+    implementation(project(":core:data"))
+    implementation(project(":core:playback"))
 
-    implementation(libs.androidx.datastore.preferences)
     implementation(libs.coil.compose)
-    implementation(libs.androidx.documentfile)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

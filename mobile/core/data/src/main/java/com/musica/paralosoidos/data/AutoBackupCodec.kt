@@ -11,7 +11,7 @@ import java.util.Locale
 import java.util.UUID
 
 @Serializable
-internal data class AutoBackupFile(
+data class AutoBackupFile(
     val app: String = APP_ID,
     val schemaVersion: Int = SCHEMA_VERSION,
     val exportedAt: Long = 0L,
@@ -26,14 +26,14 @@ internal data class AutoBackupFile(
 }
 
 @Serializable
-internal data class BackupPlaylist(
+data class BackupPlaylist(
     val id: String = "",
     val name: String = "",
     val tracks: List<BackupTrack> = emptyList()
 )
 
 @Serializable
-internal data class BackupTrack(
+data class BackupTrack(
     val title: String = "",
     val artist: String = "",
     val album: String = "",
@@ -42,7 +42,7 @@ internal data class BackupTrack(
     val displayName: String = ""
 )
 
-internal object AutoBackupCodec {
+object AutoBackupCodec {
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true

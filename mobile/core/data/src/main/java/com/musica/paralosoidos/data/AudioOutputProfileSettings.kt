@@ -9,15 +9,6 @@ import kotlinx.coroutines.flow.map
 
 private val Context.audioOutputProfileDataStore by preferencesDataStore(name = "audio_output_profile")
 
-object AudioOutputProfileIds {
-    const val STUDIO_MONITOR = "studio_monitor"
-    const val AUDIOPHILE_IEM = "audiophile_iem"
-    const val BLUETOOTH = "bluetooth_ldac"
-    const val USB_DAC = "usb_dac"
-
-    val all = setOf(STUDIO_MONITOR, AUDIOPHILE_IEM, BLUETOOTH, USB_DAC)
-}
-
 class AudioOutputProfileSettings(context: Context) {
     private val dataStore = context.applicationContext.audioOutputProfileDataStore
 

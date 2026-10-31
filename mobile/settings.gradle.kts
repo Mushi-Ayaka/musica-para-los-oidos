@@ -16,3 +16,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "MusicaParaLosOidos"
 include(":app")
+include(":core:model")
+include(":core:data")
+include(":core:playback")
