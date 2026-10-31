@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [TrackEntity::class, BackupStateEntity::class, CatalogTrackEntity::class],
     version = 4,
-    exportSchema = true
+    exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
     abstract fun trackDao(): TrackDao

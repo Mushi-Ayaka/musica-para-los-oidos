@@ -23,10 +23,6 @@ android {
     }
 }
 
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
     api(project(":core:model"))
     api(libs.androidx.room.runtime)
