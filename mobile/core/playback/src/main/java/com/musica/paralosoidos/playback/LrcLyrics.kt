@@ -5,7 +5,7 @@ data class LyricLine(
     val text: String
 )
 
-internal object LrcLyrics {
+object LrcLyrics {
     private val timestamp = Regex("""\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?]""")
 
     fun parse(source: String): List<LyricLine> = source.lineSequence()
