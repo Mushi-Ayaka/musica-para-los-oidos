@@ -1,8 +1,5 @@
 package com.musica.paralosoidos.ui
 
-import com.musica.paralosoidos.ui.components.SectionTitle
-import com.musica.paralosoidos.ui.theme.MusicaStyle
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.musica.paralosoidos.data.SavedThemePreset
 import com.musica.paralosoidos.data.ThemeSettingsState
+import com.musica.paralosoidos.ui.design.SectionTitle
+import com.musica.paralosoidos.ui.theme.MusicaStyle
 import com.musica.paralosoidos.ui.theme.ThemePresetCatalog
 
 @Composable

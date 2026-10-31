@@ -8,6 +8,7 @@ import com.musica.paralosoidos.data.MusicPlaylist
 import com.musica.paralosoidos.data.SavedEqPreset
 import com.musica.paralosoidos.data.ThemeSettingsState
 import com.musica.paralosoidos.data.TrackEntity
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,8 +17,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.util.Locale
-import java.util.UUID
 
 class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() {
     val tracks: StateFlow<List<TrackEntity>> = repository.tracks

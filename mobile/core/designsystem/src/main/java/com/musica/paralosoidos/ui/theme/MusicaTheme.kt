@@ -1,17 +1,17 @@
 package com.musica.paralosoidos.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import com.musica.paralosoidos.R
+import androidx.compose.ui.unit.dp
+import com.musica.paralosoidos.core.designsystem.R
 import com.musica.paralosoidos.data.ThemeSettingsState
 
 private val PlusJakartaSans = FontFamily(

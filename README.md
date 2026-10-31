@@ -18,10 +18,15 @@ La biblioteca reproduce archivos locales del dispositivo. Las listas, los preset
 
 ## Arquitectura Android
 
-- `mobile/app`: UI Compose, `MainActivity`, `MusicaApp`, tema y ViewModels.
+- `mobile/app`: `MainActivity`, `MusicaApp` y la raíz de navegación Compose.
 - `mobile/core/model`: modelos serializables y constantes de perfiles de audio.
 - `mobile/core/data`: Room, DataStore, repositorios, copias de seguridad y `AppContainer`.
 - `mobile/core/playback`: Media3, servicio de reproducción, ecualizador y letras LRC.
+- `mobile/core/designsystem`: tema, tipografías, estilos y componentes compartidos.
+- `mobile/feature/library`: biblioteca, listas y componentes de pistas.
+- `mobile/feature/player`: reproductor compacto/expandido y estado de reproducción.
+- `mobile/feature/equalizer`: pantalla y controles del ecualizador.
+- `mobile/feature/settings`: ajustes de tema y estilo.
 
 ## Requisitos para compilar Android
 
