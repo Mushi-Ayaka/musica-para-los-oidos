@@ -2,7 +2,10 @@ package com.musica.paralosoidos.data
 
 import android.content.ContentUris
 import android.content.Context
+import android.database.ContentObserver
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.room.Room
@@ -20,8 +23,13 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AppContainer(context: Context) {
@@ -44,12 +52,33 @@ class AppContainer(context: Context) {
     val preferences = AppPreferences(context)
     val autoBackup = AutoBackupManager(context, preferences, tracks)
 
+    private val appContext = context.applicationContext
+    private val backupState = database.backupStateDao()
+    private val resolver = appContext.contentResolver
+    private val libraryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var libraryRefreshJob: Job? = null
+    @Volatile private var lastLibraryRefreshAt = 0L
+
     init {
         autoBackup.start()
+        appContext.contentResolver.registerContentObserver(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            true,
+            object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean, uri: Uri?) {
+                    scheduleLibraryRefresh()
+                }
+            }
+        )
     }
-    private val backupState = database.backupStateDao()
-    private val resolver = context.contentResolver
-    @Volatile private var lastLibraryRefreshAt = 0L
+
+    private fun scheduleLibraryRefresh() {
+        libraryRefreshJob?.cancel()
+        libraryRefreshJob = libraryScope.launch {
+            delay(MEDIA_STORE_DEBOUNCE_MS)
+            runCatching { refreshLocalAudio(force = true) }
+        }
+    }
 
     suspend fun refreshLocalAudio(force: Boolean = false) {
         val now = SystemClock.elapsedRealtime()
@@ -322,3 +351,4 @@ class AppContainer(context: Context) {
 }
 
 private const val LIBRARY_REFRESH_INTERVAL_MS = 60_000L
+private const val MEDIA_STORE_DEBOUNCE_MS = 1_500L
