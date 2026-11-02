@@ -41,3 +41,7 @@ Desde Windows, en la raíz del repositorio:
 ```
 
 Los APKs de depuración, separados por arquitectura, se generan en `mobile/app/build/outputs/apk/debug/` (por ejemplo, `app-arm64-v8a-debug.apk`).
+
+## Licencia
+
+Este proyecto está disponible bajo la [MIT License](LICENSE).
