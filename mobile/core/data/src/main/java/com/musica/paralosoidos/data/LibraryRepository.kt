@@ -7,6 +7,7 @@ class LibraryRepository(private val container: AppContainer) {
     val playlists: Flow<List<MusicPlaylist>> = container.preferences.playlists
     val themeSettings: Flow<ThemeSettingsState> = container.preferences.themeSettings
     val customEqPresets: Flow<List<SavedEqPreset>> = container.preferences.customEqPresets
+    val lyricsScrollSpeed: Flow<Float> = container.preferences.lyricsScrollSpeed
 
     suspend fun refresh(force: Boolean) {
         container.refreshLocalAudio(force)
@@ -22,5 +23,9 @@ class LibraryRepository(private val container: AppContainer) {
 
     suspend fun saveCustomEqPresets(presets: List<SavedEqPreset>) {
         container.preferences.saveCustomEqPresets(presets)
+    }
+
+    suspend fun saveLyricsScrollSpeed(speed: Float) {
+        container.preferences.saveLyricsScrollSpeed(speed)
     }
 }

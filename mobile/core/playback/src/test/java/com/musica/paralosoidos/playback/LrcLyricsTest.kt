@@ -24,6 +24,22 @@ class LrcLyricsTest {
     }
 
     @Test
+    fun keepsUntimedLyricsAsPlainDocument() {
+        val result = LrcLyrics.parseDocument(
+            """
+                [ar:Sia]
+                Snowman
+                (MP3_160K)
+
+                Es invierno otra vez
+            """.trimIndent()
+        )
+
+        assertEquals(false, result.synced)
+        assertEquals(listOf("Snowman", "(MP3_160K)", "Es invierno otra vez"), result.lines.map { it.text })
+    }
+
+    @Test
     fun ignoresMetadataMalformedTimesAndEmptyLines() {
         val result = LrcLyrics.parse(
             """

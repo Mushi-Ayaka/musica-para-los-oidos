@@ -51,6 +51,7 @@ class AppContainer(context: Context) {
     val audioOutputProfileSettings = AudioOutputProfileSettings(context)
     val preferences = AppPreferences(context)
     val autoBackup = AutoBackupManager(context, preferences, tracks)
+    val updateRepository by lazy { com.musica.paralosoidos.data.update.UpdateRepository(appContext, preferences) }
 
     private val appContext = context.applicationContext
     private val backupState = database.backupStateDao()

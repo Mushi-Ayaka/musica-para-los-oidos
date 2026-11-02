@@ -24,6 +24,7 @@ class PlaybackViewModel(private val repository: LibraryRepository) : ViewModel()
     private var listener: Player.Listener? = null
     private var tickerJob: Job? = null
     private var tracksById: Map<String, TrackEntity> = emptyMap()
+    private var tracksByUri: Map<String, TrackEntity> = emptyMap()
 
     private val _nowPlaying = MutableStateFlow<TrackEntity?>(null)
     val nowPlaying: StateFlow<TrackEntity?> = _nowPlaying.asStateFlow()
@@ -56,7 +57,13 @@ class PlaybackViewModel(private val repository: LibraryRepository) : ViewModel()
         viewModelScope.launch {
             repository.tracks.collect { list ->
                 tracksById = list.associateBy { it.id.toString() }
-                _nowPlaying.value = controller?.currentMediaItem?.mediaId?.let(tracksById::get)
+                tracksByUri = list.associateBy { it.uri }
+                controller?.let { player ->
+                    _nowPlaying.value = resolveTrack(player.currentMediaItem)
+                    rebuildQueue(player)
+                } ?: run {
+                    _nowPlaying.value = null
+                }
             }
         }
     }
@@ -70,14 +77,16 @@ class PlaybackViewModel(private val repository: LibraryRepository) : ViewModel()
                 if (events.contains(Player.EVENT_TIMELINE_CHANGED) ||
                     events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
                 ) {
-                    _nowPlaying.value = tracksById[player.currentMediaItem?.mediaId]
+                    _nowPlaying.value = resolveTrack(player.currentMediaItem)
                     rebuildQueue(player)
                 }
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     _isPlaying.value = player.isPlaying
+                    _position.value = player.currentPosition.coerceAtLeast(0L).toFloat()
                 }
                 if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
                     _duration.value = player.duration.takeIf { it > 0L }?.toFloat() ?: 1f
+                    _position.value = player.currentPosition.coerceAtLeast(0L).toFloat()
                 }
                 if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)) {
                     _position.value = player.currentPosition.coerceAtLeast(0L).toFloat()
@@ -153,11 +162,25 @@ class PlaybackViewModel(private val repository: LibraryRepository) : ViewModel()
     }
 
     fun addQueueItem(track: TrackEntity) {
-        controller?.addMediaItem(mediaItemFor(track))
+        addQueueItems(listOf(track))
+    }
+
+    fun addQueueItems(tracks: List<TrackEntity>) {
+        val player = controller ?: return
+        if (tracks.isEmpty()) return
+        val existingIds = (0 until player.mediaItemCount)
+            .mapTo(mutableSetOf<String>()) { index -> player.getMediaItemAt(index).mediaId }
+        val newItems = tracks
+            .distinctBy { it.id }
+            .filterNot { it.id.toString() in existingIds }
+            .map(::mediaItemFor)
+        if (newItems.isNotEmpty()) {
+            player.addMediaItems(newItems)
+        }
     }
 
     private fun sync(player: Player) {
-        _nowPlaying.value = tracksById[player.currentMediaItem?.mediaId]
+        _nowPlaying.value = resolveTrack(player.currentMediaItem)
         _isPlaying.value = player.isPlaying
         _position.value = player.currentPosition.coerceAtLeast(0L).toFloat()
         _duration.value = player.duration.takeIf { it > 0L }?.toFloat() ?: 1f
@@ -169,8 +192,14 @@ class PlaybackViewModel(private val repository: LibraryRepository) : ViewModel()
 
     private fun rebuildQueue(player: Player) {
         _queue.value = (0 until player.mediaItemCount).mapNotNull { index ->
-            tracksById[player.getMediaItemAt(index).mediaId]
+            resolveTrack(player.getMediaItemAt(index))
         }
+    }
+
+    private fun resolveTrack(item: MediaItem?): TrackEntity? {
+        if (item == null) return null
+        return tracksById[item.mediaId]
+            ?: item.localConfiguration?.uri?.toString()?.let(tracksByUri::get)
     }
 
     private fun startTicker() {

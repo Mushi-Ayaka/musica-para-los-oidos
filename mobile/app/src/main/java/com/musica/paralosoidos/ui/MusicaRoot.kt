@@ -1,6 +1,7 @@
 package com.musica.paralosoidos.ui
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -47,7 +48,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -61,7 +61,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -88,11 +87,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import com.musica.paralosoidos.data.AppContainer
+import com.musica.paralosoidos.BuildConfig
 import com.musica.paralosoidos.data.AudioOutputProfileIds
 import com.musica.paralosoidos.data.AutoBackupCodec
 import com.musica.paralosoidos.data.PlaylistImportPlan
 import com.musica.paralosoidos.data.PlaylistTextCodec
 import com.musica.paralosoidos.playback.AudioEffectsManager
+import com.musica.paralosoidos.ui.LyricsSettingsSection
 import com.musica.paralosoidos.ui.ThemeSettingsSection
 import com.musica.paralosoidos.ui.components.AddTracksToPlaylistDialog
 import com.musica.paralosoidos.ui.components.EmptyLibrary
@@ -109,6 +110,9 @@ import com.musica.paralosoidos.ui.player.FullPlayer
 import com.musica.paralosoidos.ui.player.MiniPlayer
 import com.musica.paralosoidos.ui.player.PlaybackViewModel
 import com.musica.paralosoidos.ui.theme.MusicaStyle
+import com.musica.paralosoidos.ui.update.UpdateCircleButton
+import com.musica.paralosoidos.ui.update.UpdateDialog
+import com.musica.paralosoidos.ui.update.UpdateViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -136,6 +140,7 @@ fun MusicaRoot(
     val tracks by libraryViewModel.tracks.collectAsStateWithLifecycle()
     val themeSettings by libraryViewModel.themeSettings.collectAsStateWithLifecycle()
     val customEqPresets by libraryViewModel.customEqPresets.collectAsStateWithLifecycle()
+    val lyricsScrollSpeed by libraryViewModel.lyricsScrollSpeed.collectAsStateWithLifecycle()
     val playlists by libraryViewModel.playlists.collectAsStateWithLifecycle()
     val searchQuery by libraryViewModel.searchQuery.collectAsStateWithLifecycle()
     val librarySubTab by libraryViewModel.librarySubTab.collectAsStateWithLifecycle()
@@ -166,6 +171,10 @@ fun MusicaRoot(
     var showPlayer by rememberSaveable { mutableStateOf(false) }
     var themeMessage by remember { mutableStateOf<String?>(null) }
 
+    BackHandler(enabled = showPlayer) {
+        showPlayer = false
+    }
+
     var showNewPlaylistDialog by rememberSaveable { mutableStateOf(false) }
     var newPlaylistName by rememberSaveable { mutableStateOf("") }
     var playlistMessage by remember { mutableStateOf<String?>(null) }
@@ -173,6 +182,13 @@ fun MusicaRoot(
 
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val updateViewModel: UpdateViewModel = viewModel(
+        factory = UpdateViewModel.Factory(
+            context = context,
+            updateRepository = container.updateRepository,
+            currentVersion = BuildConfig.VERSION_NAME
+        )
+    )
 
     LaunchedEffect(autoBackupMessage) {
         autoBackupMessage?.let { message ->
@@ -324,6 +340,11 @@ fun MusicaRoot(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.1.sp
                     )
+                },
+                actions = {
+                    if (selectedTab == AppTab.Home) {
+                        UpdateCircleButton(viewModel = updateViewModel)
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
@@ -849,6 +870,14 @@ fun MusicaRoot(
                         )
                     }
                     item {
+                        LyricsSettingsSection(
+                            scrollSpeed = lyricsScrollSpeed,
+                            onScrollSpeedChange = { speed ->
+                                libraryViewModel.saveLyricsScrollSpeed(speed) { themeMessage = it }
+                            }
+                        )
+                    }
+                    item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             SectionTitle("Biblioteca", "Exporta nombres o crea una lista desde un archivo JSON.")
                             OutlinedButton(
@@ -907,34 +936,32 @@ fun MusicaRoot(
     }
     }
 
-    // Modal FullPlayer en raiz
+    // Reproductor a pantalla completa sobre la raiz
     if (showPlayer && nowPlaying != null) {
-        val playerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = { showPlayer = false },
-            containerColor = MaterialTheme.colorScheme.surface,
-            sheetState = playerSheetState
-        ) {
-            FullPlayer(
-                track = nowPlaying!!,
-                queue = playbackQueue,
-                allTracks = tracks,
-                controller = controller,
-                playing = isPlaying,
-                position = { position },
-                duration = { duration },
-                shuffleEnabled = shuffleEnabled,
-                repeatMode = repeatMode,
-                playbackSpeed = playbackSpeed,
-                onSpeedChange = { speed -> playbackViewModel.setSpeed(speed) },
-                error = playbackError,
-                onSelectQueueItem = { index -> playbackViewModel.seekTo(index) },
-                onMoveQueueItem = { from, to -> playbackViewModel.moveQueueItem(from, to) },
-                onRemoveQueueItem = { index -> playbackViewModel.removeQueueItem(index) },
-                onAddQueueItem = { track -> playbackViewModel.addQueueItem(track) },
-                onClose = { showPlayer = false }
-            )
-        }
+        FullPlayer(
+            track = nowPlaying!!,
+            queue = playbackQueue,
+            allTracks = tracks,
+            controller = controller,
+            playing = isPlaying,
+            position = { position },
+            duration = { duration },
+            shuffleEnabled = shuffleEnabled,
+            repeatMode = repeatMode,
+            playbackSpeed = playbackSpeed,
+            lyricsScrollSpeed = lyricsScrollSpeed,
+            onSpeedChange = { speed -> playbackViewModel.setSpeed(speed) },
+            error = playbackError,
+            onSelectQueueItem = { index -> playbackViewModel.seekTo(index) },
+            onMoveQueueItem = { from, to -> playbackViewModel.moveQueueItem(from, to) },
+            onRemoveQueueItem = { index -> playbackViewModel.removeQueueItem(index) },
+            onAddQueueItems = { selected -> playbackViewModel.addQueueItems(selected) },
+            onOpenLyricsSettings = {
+                showPlayer = false
+                selectedTabName = AppTab.Settings.name
+            },
+            onClose = { showPlayer = false }
+        )
     }
 
     if (showNewPlaylistDialog) {
@@ -1020,5 +1047,7 @@ fun MusicaRoot(
             }
         )
     }
+
+    UpdateDialog(viewModel = updateViewModel)
     }
 }

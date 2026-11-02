@@ -31,6 +31,9 @@ class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() 
     val customEqPresets: StateFlow<List<SavedEqPreset>> = repository.customEqPresets
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val lyricsScrollSpeed: StateFlow<Float> = repository.lyricsScrollSpeed
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 1f)
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -167,6 +170,16 @@ class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() 
             }.onFailure {
                 onMessage("No se pudo quitar la canción: ${it.localizedMessage ?: "error desconocido"}")
             }
+        }
+    }
+
+    fun saveLyricsScrollSpeed(speed: Float, onMessage: (String?) -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching { repository.saveLyricsScrollSpeed(speed) }
+                .onSuccess { onMessage(null) }
+                .onFailure {
+                    onMessage("No se pudo guardar la velocidad de letras: ${it.localizedMessage ?: "error desconocido"}")
+                }
         }
     }
 

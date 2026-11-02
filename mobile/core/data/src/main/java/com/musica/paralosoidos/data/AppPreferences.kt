@@ -3,6 +3,8 @@ package com.musica.paralosoidos.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +37,14 @@ class AppPreferences(context: Context) {
 
     val autoRestoreDone: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[AUTO_RESTORE_DONE_KEY] ?: false
+    }
+
+    val lyricsScrollSpeed: Flow<Float> = dataStore.data.map { preferences ->
+        (preferences[LYRICS_SCROLL_SPEED_KEY] ?: 1.0f).coerceIn(0.5f, 2.0f)
+    }
+
+    val lastUpdateCheckAt: Flow<Long> = dataStore.data.map { preferences ->
+        preferences[LAST_UPDATE_CHECK_AT_KEY] ?: 0L
     }
 
     suspend fun saveThemeSettings(settings: ThemeSettingsState) {
@@ -87,6 +97,13 @@ class AppPreferences(context: Context) {
         }
     }
 
+    suspend fun saveLyricsScrollSpeed(speed: Float) {
+        require(speed in 0.5f..2.0f) { "La velocidad de letras debe estar entre 0.5x y 2.0x." }
+        dataStore.edit { preferences ->
+            preferences[LYRICS_SCROLL_SPEED_KEY] = speed
+        }
+    }
+
     suspend fun saveLyricsFolder(uri: String?) {
         dataStore.edit { preferences ->
             if (uri.isNullOrBlank()) {
@@ -97,12 +114,20 @@ class AppPreferences(context: Context) {
         }
     }
 
+    suspend fun saveLastUpdateCheckAt(timestamp: Long) {
+        dataStore.edit { preferences ->
+            preferences[LAST_UPDATE_CHECK_AT_KEY] = timestamp
+        }
+    }
+
     private companion object {
         val THEME_KEY = stringPreferencesKey("theme_settings")
         val EQ_PRESETS_KEY = stringPreferencesKey("custom_eq_presets")
         val PLAYLISTS_KEY = stringPreferencesKey("playlists")
         val LYRICS_FOLDER_KEY = stringPreferencesKey("lyrics_folder_uri")
         val AUTO_RESTORE_DONE_KEY = booleanPreferencesKey("auto_restore_done")
+        val LYRICS_SCROLL_SPEED_KEY = floatPreferencesKey("lyrics_scroll_speed")
+        val LAST_UPDATE_CHECK_AT_KEY = longPreferencesKey("last_update_check_at")
         val HEX_COLOR_PATTERN = Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
         val SUPPORTED_FONT_FAMILIES = setOf("jakarta", "system", "serif", "mono")
     }

@@ -2,30 +2,34 @@ package com.musica.paralosoidos.ui.player
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -33,13 +37,19 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -47,6 +57,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -56,6 +67,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,6 +76,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -71,13 +84,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import com.musica.paralosoidos.data.TrackEntity
+import com.musica.paralosoidos.playback.LrcLyrics
 import com.musica.paralosoidos.playback.LyricsFileRepository
+import com.musica.paralosoidos.playback.LyricsSearchResult
 import com.musica.paralosoidos.ui.theme.MusicaStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -129,7 +146,12 @@ fun MiniPlayer(
                         colors = CardDefaults.cardColors(containerColor = MusicaStyle.Colors.borderStrong)
                     ) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Icon(
+                                Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                 }
@@ -165,268 +187,543 @@ fun FullPlayer(
     shuffleEnabled: Boolean,
     repeatMode: Int,
     playbackSpeed: Float,
+    lyricsScrollSpeed: Float,
     onSpeedChange: (Float) -> Unit,
     error: String?,
     onSelectQueueItem: (Int) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
-    onAddQueueItem: (TrackEntity) -> Unit,
+    onAddQueueItems: (List<TrackEntity>) -> Unit,
+    onOpenLyricsSettings: () -> Unit,
     onClose: () -> Unit
 ) {
+    var showAddTracks by remember { mutableStateOf(false) }
+    val pagerState = rememberPagerState(pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
+    val pageProgress = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, 1f)
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
-        IconButton(onClick = onClose) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Cerrar", modifier = Modifier.size(32.dp))
-        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+        ) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().height(44.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Cerrar reproductor",
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                    Text(
+                        "Reproduciendo",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-        val pagerState = rememberPagerState(pageCount = { 2 })
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth().height(360.dp)
-        ) { page ->
-            if (page == 0) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 8.dp),
-                        shape = MusicaStyle.Shape.sheet,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
-                    ) {
-                        if (track.artworkUri != null) {
-                            AsyncImage(
-                                model = track.artworkUri,
-                                contentDescription = "Portada de ${track.album}",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
+                BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                    val largeCover = minOf(maxWidth - 48.dp, maxHeight - 36.dp).coerceAtLeast(160.dp)
+                    val smallCover = 64.dp
+                    val largeX = (maxWidth - largeCover) / 2
+                    val largeY = (maxHeight - largeCover) / 2
+                    val coverSize = lerp(largeCover, smallCover, pageProgress)
+                    val coverX = lerp(largeX, 0.dp, pageProgress)
+                    val coverY = lerp(largeY, 0.dp, pageProgress)
+
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        if (page == 0) {
+                            Column(
+                                Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Bottom
+                            ) {
+                                Text(
+                                    "Desliza para ver las letras",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                            }
                         } else {
-                            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(72.dp), tint = MaterialTheme.colorScheme.primary)
+                            Column(Modifier.fillMaxSize()) {
+                                Row(
+                                    Modifier.fillMaxWidth().height(72.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Spacer(Modifier.width(76.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            track.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            track.artist,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                                LyricsPane(
+                                    modifier = Modifier.fillMaxWidth().weight(1f),
+                                    track = track,
+                                    positionMs = { position().toLong() },
+                                    scrollSpeed = lyricsScrollSpeed,
+                                    onOpenSettings = onOpenLyricsSettings
+                                )
                             }
                         }
                     }
-                    Text(track.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                LyricsPane(
-                    track = track,
-                    positionMs = { position().toLong() }
-                )
-            }
-        }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = { coroutineScope.launch { pagerState.animateScrollToPage(0) } }) {
-                Text("Portada", color = if (pagerState.currentPage == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            TextButton(onClick = { coroutineScope.launch { pagerState.animateScrollToPage(1) } }) {
-                Text("Letras", color = if (pagerState.currentPage == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
 
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-
-        PlayerSeekBar(position = position, duration = duration, controller = controller)
-
-        PlaybackTimeLabels(position = position, duration = duration)
-
-        // Controles de reproduccion principales
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { controller?.shuffleModeEnabled = !shuffleEnabled }) {
-                Icon(
-                    Icons.Default.Shuffle,
-                    contentDescription = "Aleatorio",
-                    tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = { controller?.seekToPreviousMediaItem() }) {
-                Icon(Icons.Default.SkipPrevious, contentDescription = "Anterior", modifier = Modifier.size(36.dp))
-            }
-            IconButton(
-                onClick = {
-                    if (controller?.isPlaying == true) controller.pause() else controller?.play()
-                },
-                modifier = Modifier
-                    .size(60.dp)
-                    .background(MaterialTheme.colorScheme.tertiary, CircleShape)
-            ) {
-                Icon(
-                    if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (playing) "Pausar" else "Reproducir",
-                    modifier = Modifier.size(36.dp),
-                    tint = Color.Black
-                )
-            }
-            IconButton(onClick = { controller?.seekToNextMediaItem() }) {
-                Icon(Icons.Default.SkipNext, contentDescription = "Siguiente", modifier = Modifier.size(36.dp))
-            }
-            IconButton(onClick = {
-                controller?.repeatMode = when (repeatMode) {
-                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                    else -> Player.REPEAT_MODE_OFF
-                }
-            }) {
-                Icon(
-                    if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                    contentDescription = "Repeticion",
-                    tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        // Selector de velocidad (dropdown)
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Velocidad de reproduccion:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            var speedExpanded by remember { mutableStateOf(false) }
-            Box {
-                Surface(
-                    onClick = { speedExpanded = true },
-                    shape = MusicaStyle.Shape.tiny,
-                    color = MusicaStyle.Colors.borderStrong,
-                    border = BorderStroke(1.dp, MusicaStyle.Colors.overlaySoft)
-                ) {
-                    Row(
-                        Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Card(
+                        modifier = Modifier
+                            .offset(x = coverX, y = coverY)
+                            .size(coverSize),
+                        shape = if (pageProgress < 0.5f) MusicaStyle.Shape.sheet else MusicaStyle.Shape.tiny,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
                     ) {
-                        Text("${playbackSpeed}x", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                    }
-                }
-                DropdownMenu(
-                    expanded = speedExpanded,
-                    onDismissRequest = { speedExpanded = false },
-                    modifier = Modifier.background(MusicaStyle.Colors.menuBackground)
-                ) {
-                    listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "${speed}x" + if (speed == 1.0f) " (Normal)" else "",
-                                    fontWeight = if (playbackSpeed == speed) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (playbackSpeed == speed) MaterialTheme.colorScheme.primary else Color.White,
-                                    fontSize = 12.sp
+                        Box(Modifier.fillMaxSize()) {
+                            if (track.artworkUri != null) {
+                                AsyncImage(
+                                    model = track.artworkUri,
+                                    contentDescription = "Portada de ${track.album}",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
                                 )
-                            },
-                            onClick = {
-                                onSpeedChange(speed)
-                                speedExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("En cola (${queue.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        Text(
-            "Mantén pulsada una pista y arrástrala para cambiar el orden.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        var showAddTracks by remember { mutableStateOf(false) }
-        OutlinedButton(onClick = { showAddTracks = !showAddTracks }) {
-            Text(if (showAddTracks) "Ocultar pistas" else "Añadir pistas a la cola")
-        }
-        val queuePositions = remember(queue) { queue.withIndex().associate { it.value.id to it.index } }
-        if (showAddTracks) {
-            val queueIds = queue.mapTo(mutableSetOf()) { it.id }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(allTracks.filterNot { it.id in queueIds }, key = { "add-${it.id}" }) { candidate ->
-                    Surface(
-                        onClick = { onAddQueueItem(candidate) },
-                        shape = MusicaStyle.Shape.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Text(
-                            candidate.title,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-        }
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
-            items(queue, key = { "queue-${it.id}" }) { queued ->
-                val latestQueue by rememberUpdatedState(queue)
-                val latestMove by rememberUpdatedState(onMoveQueueItem)
-                val density = LocalDensity.current
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .pointerInput(queued.id) {
-                            var accumulatedDrag = 0f
-                            val moveThreshold = with(density) { 44.dp.toPx() }
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { accumulatedDrag = 0f },
-                                onDragEnd = { accumulatedDrag = 0f },
-                                onDragCancel = { accumulatedDrag = 0f }
-                            ) { change, dragAmount ->
-                                change.consume()
-                                accumulatedDrag += dragAmount.y
-                                while (accumulatedDrag >= moveThreshold || accumulatedDrag <= -moveThreshold) {
-                                    val currentIndex = latestQueue.indexOfFirst { it.id == queued.id }
-                                    val direction = if (accumulatedDrag > 0) 1 else -1
-                                    val targetIndex = currentIndex + direction
-                                    if (currentIndex !in latestQueue.indices || targetIndex !in latestQueue.indices) {
-                                        accumulatedDrag = 0f
-                                        break
-                                    }
-                                    latestMove(currentIndex, targetIndex)
-                                    accumulatedDrag -= direction * moveThreshold
+                            } else {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.LibraryMusic,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(if (pageProgress < 0.5f) 72.dp else 28.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
-                        },
+                            Column(
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    .fillMaxWidth()
+                                    .background(MusicaStyle.Colors.scrim)
+                                    .padding(12.dp)
+                                    .alpha((1f - pageProgress * 2.2f).coerceIn(0f, 1f))
+                            ) {
+                                Text(
+                                    track.title,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2
+                                )
+                                Text(
+                                    track.artist,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MusicaStyle.Colors.neutral,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val index = queuePositions[queued.id] ?: 0
-                    Column(
-                        Modifier.weight(1f).clickable { onSelectQueueItem(index) }.padding(vertical = 6.dp)
-                    ) {
-                        Text(queued.title, maxLines = 1, fontWeight = FontWeight.SemiBold)
-                        Text(queued.artist, maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    repeat(2) { page ->
+                        val selected = pagerState.currentPage == page
+                        Box(
+                            Modifier
+                                .padding(horizontal = 4.dp)
+                                .size(width = if (selected) 22.dp else 7.dp, height = 7.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                                )
+                                .clickable {
+                                    coroutineScope.launch { pagerState.animateScrollToPage(page) }
+                                }
+                        )
                     }
-                    IconButton(onClick = { onRemoveQueueItem(index) }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Quitar de la cola", tint = MaterialTheme.colorScheme.error)
+                }
+
+                error?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 2,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
+                }
+
+                PlayerSeekBar(position = position, duration = duration, controller = controller)
+                PlaybackTimeLabels(position = position, duration = duration)
+
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { controller?.shuffleModeEnabled = !shuffleEnabled }) {
+                        Icon(
+                            Icons.Default.Shuffle,
+                            contentDescription = "Aleatorio",
+                            tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { controller?.seekToPreviousMediaItem() }) {
+                        Icon(Icons.Default.SkipPrevious, contentDescription = "Anterior", modifier = Modifier.size(34.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            if (controller?.isPlaying == true) controller.pause() else controller?.play()
+                        },
+                        modifier = Modifier
+                            .size(58.dp)
+                            .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+                    ) {
+                        Icon(
+                            if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (playing) "Pausar" else "Reproducir",
+                            modifier = Modifier.size(34.dp),
+                            tint = Color.Black
+                        )
+                    }
+                    IconButton(onClick = { controller?.seekToNextMediaItem() }) {
+                        Icon(Icons.Default.SkipNext, contentDescription = "Siguiente", modifier = Modifier.size(34.dp))
+                    }
+                    IconButton(onClick = {
+                        controller?.repeatMode = when (repeatMode) {
+                            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                            else -> Player.REPEAT_MODE_OFF
+                        }
+                    }) {
+                        Icon(
+                            if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                            contentDescription = "Repeticion",
+                            tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Velocidad:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    var speedExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Surface(
+                            onClick = { speedExpanded = true },
+                            shape = MusicaStyle.Shape.tiny,
+                            color = MusicaStyle.Colors.borderStrong,
+                            border = BorderStroke(1.dp, MusicaStyle.Colors.overlaySoft)
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    "${playbackSpeed}x",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = speedExpanded,
+                            onDismissRequest = { speedExpanded = false },
+                            containerColor = MusicaStyle.Colors.menuBackground,
+                            border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
+                        ) {
+                            listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "${speed}x" + if (speed == 1.0f) " (Normal)" else "",
+                                            fontWeight = if (playbackSpeed == speed) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (playbackSpeed == speed) MaterialTheme.colorScheme.primary else Color.White,
+                                            fontSize = 12.sp
+                                        )
+                                    },
+                                    onClick = {
+                                        onSpeedChange(speed)
+                                        speedExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Column(Modifier.fillMaxWidth().weight(1f)) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "En cola (${queue.size})",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Mantén pulsada una pista para reordenar.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { showAddTracks = true }) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Añadir pistas a la cola",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    val queuePositions = remember(queue) { queue.withIndex().associate { it.value.id to it.index } }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = PaddingValues(bottom = 10.dp)
+                    ) {
+                        items(queue, key = { "queue-${it.id}" }) { queued ->
+                            val latestQueue by rememberUpdatedState(queue)
+                            val latestMove by rememberUpdatedState(onMoveQueueItem)
+                            val density = LocalDensity.current
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .pointerInput(queued.id) {
+                                        var accumulatedDrag = 0f
+                                        val moveThreshold = with(density) { 44.dp.toPx() }
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = { accumulatedDrag = 0f },
+                                            onDragEnd = { accumulatedDrag = 0f },
+                                            onDragCancel = { accumulatedDrag = 0f }
+                                        ) { change, dragAmount ->
+                                            change.consume()
+                                            accumulatedDrag += dragAmount.y
+                                            while (accumulatedDrag >= moveThreshold || accumulatedDrag <= -moveThreshold) {
+                                                val currentIndex = latestQueue.indexOfFirst { it.id == queued.id }
+                                                val direction = if (accumulatedDrag > 0) 1 else -1
+                                                val targetIndex = currentIndex + direction
+                                                if (currentIndex !in latestQueue.indices || targetIndex !in latestQueue.indices) {
+                                                    accumulatedDrag = 0f
+                                                    break
+                                                }
+                                                latestMove(currentIndex, targetIndex)
+                                                accumulatedDrag -= direction * moveThreshold
+                                            }
+                                        }
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val index = queuePositions[queued.id] ?: 0
+                                Column(
+                                    Modifier
+                                        .weight(1f)
+                                        .clickable { onSelectQueueItem(index) }
+                                        .padding(vertical = 6.dp)
+                                ) {
+                                    Text(queued.title, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        queued.artist,
+                                        maxLines = 1,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(onClick = { onRemoveQueueItem(index) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Quitar de la cola",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
+    if (showAddTracks) {
+        AddTracksToQueueDialog(
+            queue = queue,
+            allTracks = allTracks,
+            onDismiss = { showAddTracks = false },
+            onAddTracks = { selected ->
+                onAddQueueItems(selected)
+                showAddTracks = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun AddTracksToQueueDialog(
+    queue: List<TrackEntity>,
+    allTracks: List<TrackEntity>,
+    onDismiss: () -> Unit,
+    onAddTracks: (List<TrackEntity>) -> Unit
+) {
+    val queueIds = remember(queue) { queue.mapTo(mutableSetOf()) { it.id } }
+    val availableTracks = remember(allTracks, queueIds) {
+        allTracks.filterNot { it.id in queueIds }
+    }
+    var search by remember { mutableStateOf("") }
+    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val filteredTracks = remember(availableTracks, search) {
+        if (search.isBlank()) {
+            availableTracks
+        } else {
+            availableTracks.filter {
+                it.title.contains(search, ignoreCase = true) ||
+                    it.artist.contains(search, ignoreCase = true) ||
+                    it.album.contains(search, ignoreCase = true)
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Añadir pistas a la cola", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Buscar canción, artista o álbum") }
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${filteredTracks.size} disponibles",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(
+                        onClick = {
+                            selectedIds = if (selectedIds.size == filteredTracks.size) {
+                                emptySet()
+                            } else {
+                                filteredTracks.map { it.id }.toSet()
+                            }
+                        }
+                    ) {
+                        Text(if (selectedIds.size == filteredTracks.size) "Deseleccionar" else "Seleccionar todas")
+                    }
+                }
+                if (filteredTracks.isEmpty()) {
+                    Text(
+                        "Todas las pistas disponibles ya están en la cola.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(filteredTracks, key = { "queue-add-${it.id}" }) { track ->
+                            val isChecked = track.id in selectedIds
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(MusicaStyle.Shape.tiny)
+                                    .clickable {
+                                        selectedIds = if (isChecked) selectedIds - track.id else selectedIds + track.id
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { checked ->
+                                        selectedIds = if (checked) selectedIds + track.id else selectedIds - track.id
+                                    }
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(track.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                                    Text(
+                                        "${track.artist} • ${track.album}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = selectedIds.isNotEmpty(),
+                onClick = {
+                    onAddTracks(availableTracks.filter { it.id in selectedIds })
+                }
+            ) {
+                Text("Añadir (${selectedIds.size})")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
+    )
 }
 
 @Composable
@@ -474,55 +771,124 @@ internal fun PlaybackTimeLabels(
 
 @Composable
 internal fun LyricsPane(
-        track: TrackEntity,
-        positionMs: () -> Long
-    ) {
-        val context = LocalContext.current
-        var lines by remember(track.id) { mutableStateOf(emptyList<com.musica.paralosoidos.playback.LyricLine>()) }
-        var message by remember(track.id) { mutableStateOf("Buscando letras...") }
-        val activeLine = remember(lines, positionMs()) {
-            com.musica.paralosoidos.playback.LrcLyrics.currentLineIndex(lines, positionMs())
-        }
+    modifier: Modifier = Modifier,
+    track: TrackEntity,
+    positionMs: () -> Long,
+    scrollSpeed: Float,
+    onOpenSettings: () -> Unit
+) {
+    val context = LocalContext.current
+    var result by remember(track.id) { mutableStateOf<LyricsSearchResult?>(null) }
+    var loading by remember(track.id) { mutableStateOf(true) }
+    var retryToken by remember(track.id) { mutableIntStateOf(0) }
 
-        LaunchedEffect(track.id) {
-            lines = emptyList()
-            message = "Buscando ${track.displayName.substringBeforeLast('.', track.displayName)}.lrc..."
+    LaunchedEffect(track.id, retryToken) {
+        loading = true
+        result = null
+        result = withContext(Dispatchers.IO) {
             runCatching {
-                withContext(Dispatchers.IO) {
-                    LyricsFileRepository.findMatchingLyrics(
-                        context = context,
-                        audioFileName = track.displayName,
-                        trackTitle = track.title
-                    )
-                }
-            }.onSuccess { found ->
-                if (found == null) {
-                    message = "No se encontró el .lrc. Android puede limitar el acceso a archivos de letras no indexados."
-                } else {
-                    lines = found.second
-                    message = "Letras: ${found.first}"
-                }
-            }.onFailure { error ->
-                message = "No se pudieron leer las letras: ${error.localizedMessage ?: "error desconocido"}"
+                LyricsFileRepository.findMatchingLyrics(
+                    context = context,
+                    audioFileName = track.displayName,
+                    trackTitle = track.title,
+                    trackArtist = track.artist
+                )
+            }.getOrElse { error ->
+                LyricsSearchResult(
+                    sourceName = null,
+                    document = null,
+                    logs = listOf("Error al buscar letras: ${error.localizedMessage ?: "error desconocido"}.")
+                )
             }
         }
+        loading = false
+    }
 
-        Column(
-            Modifier.fillMaxSize().padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text("Letras", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (lines.isNotEmpty()) {
-                val lyricListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    Column(
+        modifier = modifier.padding(top = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            "Letras",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (loading) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("Buscando coincidencias en MediaStore...", style = MaterialTheme.typography.bodySmall)
+            }
+        } else {
+            val document = result?.document
+            val lines = document?.lines.orEmpty()
+            if (document == null || lines.isEmpty()) {
+                val logs = result?.logs.orEmpty()
+                Column(
+                    Modifier.fillMaxWidth().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(logs) { log ->
+                            Text(
+                                log,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(onClick = { retryToken++ }) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Reintentar")
+                        }
+                        OutlinedButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Ajustes")
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    buildString {
+                        append(result?.sourceName ?: "LRC")
+                        append(if (document.synced) " · sincronizada" else " · sin tiempos")
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                val intervalMs = (4_000f / scrollSpeed.coerceIn(0.5f, 2f)).toLong().coerceAtLeast(500L)
+                val activeLine = if (document.synced) {
+                    LrcLyrics.currentLineIndex(lines, positionMs())
+                } else {
+                    (positionMs() / intervalMs).toInt().coerceIn(0, lines.lastIndex)
+                }
+                val listState = rememberLazyListState()
                 LaunchedEffect(activeLine) {
-                    if (activeLine >= 0) lyricListState.animateScrollToItem(activeLine)
+                    if (lines.isNotEmpty()) {
+                        listState.animateScrollToItem((activeLine - 2).coerceAtLeast(0))
+                    }
                 }
                 LazyColumn(
-                    state = lyricListState,
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    state = listState,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp)
                 ) {
                     items(lines.size) { index ->
                         Text(
@@ -530,12 +896,14 @@ internal fun LyricsPane(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = if (index == activeLine) FontWeight.Bold else FontWeight.Normal,
-                            color = if (index == activeLine) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (index == activeLine) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Start
                         )
                     }
                 }
             }
         }
+    }
 }
 
 internal fun formatTime(seconds: Long): String =

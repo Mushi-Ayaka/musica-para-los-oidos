@@ -12,6 +12,7 @@ La web es el prototipo visual y de interacción. La aplicación principal se est
 - En Ajustes se pueden exportar los nombres de las canciones a TXT e importar listas JSON con el formato `{"name":"Favoritas","songs":["Cancion 1","Cancion 2"]}`. Los nombres deben coincidir de forma única con pistas de la biblioteca.
 - La app guarda una copia automática de listas, tema y presets del ecualizador en `Descargas/MusicaParaLosOidos/`. Al reinstalar intenta restaurarla automáticamente; también se puede exportar o restaurar manualmente desde Ajustes.
 - La cola se reordena manteniendo pulsada una pista y arrastrándola. Las pistas dentro de una lista se pueden agregar, quitar y reordenar.
+- En la pestaña Inicio se incluye un indicador de actualizaciones que comprueba versiones periódicamente contra GitHub Releases y permite descargar e instalar directamente nuevas versiones.
 - Esta versión no ofrece rastreo de YouTube ni descargas. La paridad visual completa con el prototipo web y la validación funcional en distintos dispositivos siguen en desarrollo.
 
 La biblioteca reproduce archivos locales del dispositivo. Las listas, los presets del ecualizador y las preferencias visuales se guardan localmente; los archivos de audio y letras no se copian al almacenamiento interno de la aplicación.
