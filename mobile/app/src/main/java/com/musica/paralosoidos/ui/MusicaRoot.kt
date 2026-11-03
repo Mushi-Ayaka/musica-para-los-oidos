@@ -862,6 +862,20 @@ fun MusicaRoot(
 
                 AppTab.Settings -> {
                     item {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "Ajustes",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                "Apariencia, letras y copias de seguridad.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    item {
                         ThemeSettingsSection(
                             savedSettings = themeSettings,
                             onSave = { settings ->
@@ -880,51 +894,65 @@ fun MusicaRoot(
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             SectionTitle("Biblioteca", "Exporta nombres o crea una lista desde un archivo JSON.")
-                            OutlinedButton(
-                                onClick = { exportTrackNames.launch("canciones.txt") },
-                                modifier = Modifier.fillMaxWidth()
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MusicaStyle.Shape.row,
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                ),
+                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
                             ) {
-                                Text("Exportar nombres de canciones (.txt)")
-                            }
-                            OutlinedButton(
-                                onClick = { importPlaylistJson.launch(arrayOf("application/json", "text/*")) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Importar lista desde JSON")
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        runCatching { container.autoBackup.exportNow() }
-                                            .onSuccess {
-                                                playlistMessage = "Copia guardada en Descargas/MusicaParaLosOidos."
-                                            }
-                                            .onFailure {
-                                                playlistMessage = "No se pudo guardar la copia: ${it.localizedMessage ?: "error desconocido"}"
-                                            }
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { exportTrackNames.launch("canciones.txt") },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Exportar nombres de canciones (.txt)")
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Exportar copia ahora")
+                                    OutlinedButton(
+                                        onClick = { importPlaylistJson.launch(arrayOf("application/json", "text/*")) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Importar lista desde JSON")
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                runCatching { container.autoBackup.exportNow() }
+                                                    .onSuccess {
+                                                        playlistMessage = "Copia guardada en Descargas/MusicaParaLosOidos."
+                                                    }
+                                                    .onFailure {
+                                                        playlistMessage = "No se pudo guardar la copia: ${it.localizedMessage ?: "error desconocido"}"
+                                                    }
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Exportar copia ahora")
+                                    }
+                                    OutlinedButton(
+                                        onClick = { restoreBackupFile.launch(arrayOf("application/json", "text/*")) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Restaurar copia desde archivo")
+                                    }
+                                    Text(
+                                        "Copia automática: Descargas/MusicaParaLosOidos/musica-para-los-oidos-backup.json",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        """Formato JSON: {"name":"Favoritas","songs":["Cancion 1","Cancion 2"]}""",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    playlistMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                                }
                             }
-                            OutlinedButton(
-                                onClick = { restoreBackupFile.launch(arrayOf("application/json", "text/*")) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Restaurar copia desde archivo")
-                            }
-                            Text(
-                                "Copia automática: Descargas/MusicaParaLosOidos/musica-para-los-oidos-backup.json",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                """Formato JSON: {"name":"Favoritas","songs":["Cancion 1","Cancion 2"]}""",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            playlistMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         }
                     }
                     themeMessage?.let { message ->
