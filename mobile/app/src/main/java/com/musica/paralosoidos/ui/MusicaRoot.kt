@@ -394,7 +394,7 @@ fun MusicaRoot(
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = Color.Transparent
+                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                             )
                         )
                     }
@@ -417,13 +417,6 @@ fun MusicaRoot(
                                 .fillMaxWidth()
                                 .padding(top = 2.dp, bottom = 4.dp)
                         ) {
-                            Text(
-                                "MUSICA PARA LOS OIDOS",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                letterSpacing = 1.1.sp
-                            )
                             Text(
                                 "Inicio",
                                 style = MaterialTheme.typography.headlineMedium,

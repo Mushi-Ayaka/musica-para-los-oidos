@@ -95,6 +95,7 @@ fun TrackRow(
     Row(
         Modifier
             .fillMaxWidth()
+            .clip(MusicaStyle.Shape.tiny)
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -367,14 +368,14 @@ fun PlaylistTrackRow(
                 maxLines = 1
             )
         }
-        IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.ArrowUpward, contentDescription = "Subir pista", modifier = Modifier.size(16.dp))
+        IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(40.dp)) {
+            Icon(Icons.Default.ArrowUpward, contentDescription = "Subir pista", modifier = Modifier.size(18.dp))
         }
-        IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.ArrowDownward, contentDescription = "Bajar pista", modifier = Modifier.size(16.dp))
+        IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(40.dp)) {
+            Icon(Icons.Default.ArrowDownward, contentDescription = "Bajar pista", modifier = Modifier.size(18.dp))
         }
-        IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Close, contentDescription = "Quitar de lista", modifier = Modifier.size(16.dp))
+        IconButton(onClick = onRemove, modifier = Modifier.size(40.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Quitar de lista", modifier = Modifier.size(18.dp))
         }
     }
 }

@@ -17,8 +17,8 @@ android {
         applicationId = "com.musica.paralosoidos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.2.1"
+        versionCode = 12
+        versionName = "1.2.2"
 
         manifestPlaceholders["appLabel"] = "@string/app_name"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

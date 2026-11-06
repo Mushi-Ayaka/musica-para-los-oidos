@@ -428,7 +428,7 @@ fun FullPlayer(
                     }) {
                         Icon(
                             if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                            contentDescription = "Repeticion",
+                            contentDescription = "Repetición",
                             tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }

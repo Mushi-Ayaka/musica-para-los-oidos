@@ -75,6 +75,13 @@ fun MusicaTheme(
             background = background,
             surface = surface,
             surfaceVariant = elevated,
+            secondaryContainer = secondary.copy(alpha = 0.20f),
+            onSecondaryContainer = text,
+            outline = Color(0x26FFFFFF),
+            outlineVariant = Color(0x14FFFFFF),
+            surfaceContainer = surface,
+            surfaceContainerHigh = elevated,
+            surfaceContainerHighest = elevated,
             onBackground = text,
             onSurface = text,
             onSurfaceVariant = muted
