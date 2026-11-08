@@ -24,13 +24,19 @@ fun ThemeSettingsSection(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
+            val savedUri = runCatching {
+                val file = java.io.File(context.filesDir, "custom_wallpaper_${System.currentTimeMillis()}.jpg")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                }
+                android.net.Uri.fromFile(file).toString()
+            }.getOrElse {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                uri.toString()
             }
-            draft = draft.copy(wallpaperUri = uri.toString())
+            draft = draft.copy(wallpaperUri = savedUri)
         }
     }
 

@@ -12,6 +12,9 @@ abstract class TrackDao {
     @Query("SELECT * FROM audio_tracks ORDER BY title COLLATE NOCASE")
     abstract fun observeAll(): Flow<List<TrackEntity>>
 
+    @Query("SELECT COUNT(*) FROM audio_tracks")
+    abstract suspend fun count(): Int
+
     @Query("DELETE FROM audio_tracks")
     protected abstract suspend fun deleteAll()
 

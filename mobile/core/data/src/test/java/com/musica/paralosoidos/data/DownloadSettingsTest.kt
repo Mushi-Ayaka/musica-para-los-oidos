@@ -13,4 +13,13 @@ class DownloadSettingsTest {
         assertFalse(DownloadSettingsState(AudioOutputFormat.MP3, 999).isConfigured)
         assertTrue(DownloadSettingsState(AudioOutputFormat.MP3, 320).isConfigured)
     }
+
+    @Test
+    fun downloadSettingsDefaultsSyncLyricsToTrue() {
+        val defaultState = DownloadSettingsState()
+        assertTrue(defaultState.syncLyrics)
+
+        val customState = DownloadSettingsState(format = AudioOutputFormat.MP3, mp3Bitrate = 320, syncLyrics = false)
+        assertFalse(customState.syncLyrics)
+    }
 }

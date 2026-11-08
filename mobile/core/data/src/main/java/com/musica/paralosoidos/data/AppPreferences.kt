@@ -2,6 +2,8 @@ package com.musica.paralosoidos.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -120,6 +122,86 @@ class AppPreferences(context: Context) {
         }
     }
 
+    val hiddenFolders: Flow<Set<String>> = dataStore.data.map { preferences ->
+        preferences[HIDDEN_FOLDERS_KEY] ?: emptySet()
+    }
+
+    suspend fun saveHiddenFolders(folders: Set<String>) {
+        dataStore.edit { preferences ->
+            preferences[HIDDEN_FOLDERS_KEY] = folders
+        }
+    }
+
+    val eqEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[EQ_ENABLED_KEY] ?: false
+    }
+
+    suspend fun saveEqEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[EQ_ENABLED_KEY] = enabled
+        }
+    }
+
+    val activeEqPreset: Flow<String> = dataStore.data.map { preferences ->
+        preferences[ACTIVE_EQ_PRESET_KEY] ?: "Plano"
+    }
+
+    suspend fun saveActiveEqPreset(preset: String) {
+        dataStore.edit { preferences ->
+            preferences[ACTIVE_EQ_PRESET_KEY] = preset
+        }
+    }
+
+    val eqBands: Flow<List<Int>> = dataStore.data.map { preferences ->
+        preferences[EQ_BANDS_KEY]?.let { runCatching { json.decodeFromString<List<Int>>(it) }.getOrNull() } ?: List(10) { 0 }
+    }
+
+    suspend fun saveEqBands(bands: List<Int>) {
+        dataStore.edit { preferences ->
+            preferences[EQ_BANDS_KEY] = json.encodeToString(bands)
+        }
+    }
+
+    val bassBoost: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[BASS_BOOST_KEY] ?: 0
+    }
+
+    suspend fun saveBassBoost(strength: Int) {
+        dataStore.edit { preferences ->
+            preferences[BASS_BOOST_KEY] = strength
+        }
+    }
+
+    val virtualizer: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[VIRTUALIZER_KEY] ?: 0
+    }
+
+    suspend fun saveVirtualizer(strength: Int) {
+        dataStore.edit { preferences ->
+            preferences[VIRTUALIZER_KEY] = strength
+        }
+    }
+
+    val speakerBoost: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[SPEAKER_BOOST_KEY] ?: 0
+    }
+
+    suspend fun saveSpeakerBoost(strength: Int) {
+        dataStore.edit { preferences ->
+            preferences[SPEAKER_BOOST_KEY] = strength
+        }
+    }
+
+    val mediaVolume: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[MEDIA_VOLUME_KEY] ?: 100f
+    }
+
+    suspend fun saveMediaVolume(volume: Float) {
+        dataStore.edit { preferences ->
+            preferences[MEDIA_VOLUME_KEY] = volume.coerceIn(0f, 100f)
+        }
+    }
+
     private companion object {
         val THEME_KEY = stringPreferencesKey("theme_settings")
         val EQ_PRESETS_KEY = stringPreferencesKey("custom_eq_presets")
@@ -128,6 +210,14 @@ class AppPreferences(context: Context) {
         val AUTO_RESTORE_DONE_KEY = booleanPreferencesKey("auto_restore_done")
         val LYRICS_SCROLL_SPEED_KEY = floatPreferencesKey("lyrics_scroll_speed")
         val LAST_UPDATE_CHECK_AT_KEY = longPreferencesKey("last_update_check_at")
+        val HIDDEN_FOLDERS_KEY = stringSetPreferencesKey("hidden_folders")
+        val EQ_ENABLED_KEY = booleanPreferencesKey("eq_enabled")
+        val ACTIVE_EQ_PRESET_KEY = stringPreferencesKey("active_eq_preset")
+        val EQ_BANDS_KEY = stringPreferencesKey("eq_bands")
+        val BASS_BOOST_KEY = intPreferencesKey("bass_boost")
+        val VIRTUALIZER_KEY = intPreferencesKey("virtualizer")
+        val SPEAKER_BOOST_KEY = intPreferencesKey("speaker_boost")
+        val MEDIA_VOLUME_KEY = floatPreferencesKey("media_volume")
         val HEX_COLOR_PATTERN = Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
         val SUPPORTED_FONT_FAMILIES = setOf("jakarta", "system", "serif", "mono")
     }

@@ -685,6 +685,26 @@ object AudioEffectsManager {
 
 
 
+    fun restoreState(
+        enabled: Boolean,
+        preset: String,
+        bands: List<Int>,
+        bassStrength: Int,
+        virtualizerStrength: Int,
+        speakerBoost: Int
+    ) {
+        _isEnabled.value = enabled
+        _selectedPreset.value = preset
+        if (bands.size == bandFrequencies.size) {
+            _bands.value = bands.map { it.coerceIn(MIN_GAIN_DB, MAX_GAIN_DB) }
+        }
+        setEnabled(enabled)
+        setBassBoost(bassStrength)
+        setVirtualizer(virtualizerStrength)
+        setSpeakerBoost(speakerBoost)
+        scheduleApplyBands()
+    }
+
     fun setOutputProfile(profileId: String) {
 
         if (outputProfiles.none { it.id == profileId }) return

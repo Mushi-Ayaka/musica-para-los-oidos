@@ -3,6 +3,38 @@ package com.musica.paralosoidos.data
 import kotlinx.serialization.Serializable
 
 @Serializable
+enum class AudioOutputFormat(val key: String, val label: String) {
+    BEST("best", "Mejor calidad disponible (formato original)"),
+    MP3("mp3", "MP3")
+}
+
+@Serializable
+enum class DownloadTaskStatus {
+    QUEUED,
+    DOWNLOADING,
+    PAUSED,
+    COMPLETED,
+    ERROR
+}
+
+@Serializable
+data class DownloadTask(
+    val id: String,
+    val videoId: String,
+    val title: String,
+    val channel: String,
+    val thumbnailUrl: String,
+    val format: AudioOutputFormat,
+    val bitrate: Int?,
+    val syncLyrics: Boolean,
+    val status: DownloadTaskStatus = DownloadTaskStatus.QUEUED,
+    val progress: Int = 0,
+    val speed: String = "",
+    val errorMessage: String? = null,
+    val addedAt: Long = System.currentTimeMillis()
+)
+
+@Serializable
 data class ThemeSettingsState(
     val presetId: String = "amoled",
     val backgroundColor: String = "#000000",
@@ -52,4 +84,38 @@ object AudioOutputProfileIds {
     const val USB_DAC = "usb_dac"
 
     val all = setOf(STUDIO_MONITOR, AUDIOPHILE_IEM, BLUETOOTH, USB_DAC)
+}
+
+@Serializable
+data class FolderItem(
+    val path: String,
+    val name: String,
+    val trackCount: Int,
+    val isHidden: Boolean
+)
+
+@Serializable
+data class DownloadSearchResult(
+    val id: String,
+    val title: String,
+    val channel: String,
+    val durationSeconds: Int,
+    val thumbnailUrl: String,
+    val viewCount: Long = 0,
+    val uploadDate: String = ""
+) {
+    val formattedDuration: String
+        get() {
+            val minutes = durationSeconds / 60
+            val seconds = durationSeconds % 60
+            return "%02d:%02d".format(minutes, seconds)
+        }
+
+    val formattedViews: String
+        get() = when {
+            viewCount >= 1_000_000 -> "%.1fM vistas".format(viewCount / 1_000_000.0)
+            viewCount >= 1_000 -> "%.1fK vistas".format(viewCount / 1_000.0)
+            viewCount > 0 -> "$viewCount vistas"
+            else -> ""
+        }
 }

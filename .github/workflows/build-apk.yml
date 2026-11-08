@@ -76,4 +76,4 @@ jobs:
 
             - Firmado con clave release propia.
             - Optimizado con R8 y reducción de recursos.
-            - Reproduce archivos locales; sin rastreadores ni descargadores de YouTube.
+            - Reproductor local, ecualizador persistente, control de carpetas, temas personalizados, descargador de audio y letras LRC con auto-scan.

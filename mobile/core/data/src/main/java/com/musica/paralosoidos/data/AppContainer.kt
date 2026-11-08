@@ -41,7 +41,8 @@ class AppContainer(context: Context) {
     ).addMigrations(
         MusicDatabase.MIGRATION_1_2,
         MusicDatabase.MIGRATION_2_3,
-        MusicDatabase.MIGRATION_3_4
+        MusicDatabase.MIGRATION_3_4,
+        MusicDatabase.MIGRATION_4_5
     ).build()
 
     val tracks = database.trackDao()
@@ -52,6 +53,24 @@ class AppContainer(context: Context) {
     val preferences = AppPreferences(context)
     val autoBackup = AutoBackupManager(context, preferences, tracks)
     val updateRepository by lazy { com.musica.paralosoidos.data.update.UpdateRepository(appContext, preferences) }
+    val networkMonitor: NetworkMonitor by lazy { ConnectivityNetworkMonitor(appContext) }
+    val downloadNotificationManager by lazy { DownloadNotificationManager(appContext) }
+    private val okHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
+    val downloadStorageManager by lazy { DownloadStorageManager(appContext) }
+    val lyricsDownloadEngine by lazy { com.musica.paralosoidos.data.lyrics.LyricsDownloadEngine(okHttpClient) }
+    val audioDownloadEngine by lazy { com.musica.paralosoidos.data.download.AudioDownloadEngine(okHttpClient) }
+    val downloadQueueManager by lazy {
+        DownloadQueueManager(
+            context = appContext,
+            notificationManager = downloadNotificationManager,
+            storageManager = downloadStorageManager,
+            audioDownloadEngine = audioDownloadEngine,
+            lyricsDownloadEngine = lyricsDownloadEngine,
+            onDownloadComplete = { _ ->
+                runCatching { refreshLocalAudio(force = true) }
+            }
+        )
+    }
 
     private val appContext = context.applicationContext
     private val backupState = database.backupStateDao()
@@ -81,6 +100,23 @@ class AppContainer(context: Context) {
         }
     }
 
+    suspend fun verifyAndSyncAudioMismatch() {
+        withContext(Dispatchers.IO) {
+            val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+            var mediaStoreCount = 0
+            runCatching {
+                resolver.query(collection, arrayOf(MediaStore.Audio.Media._ID), selection, null, null)?.use {
+                    mediaStoreCount = it.count
+                }
+            }
+            val dbCount = tracks.count()
+            if (mediaStoreCount != dbCount) {
+                refreshLocalAudio(force = true)
+            }
+        }
+    }
+
     suspend fun refreshLocalAudio(force: Boolean = false) {
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastLibraryRefreshAt < LIBRARY_REFRESH_INTERVAL_MS) return
@@ -104,7 +140,8 @@ class AppContainer(context: Context) {
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DISPLAY_NAME
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.DATA
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val found = mutableListOf<TrackEntity>()
@@ -123,6 +160,7 @@ class AppContainer(context: Context) {
             val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val dataColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
@@ -140,10 +178,28 @@ class AppContainer(context: Context) {
                     uri = ContentUris.withAppendedId(collection, id).toString(),
                     displayName = cursor.getString(displayNameColumn).orEmpty(),
                     artworkUri = albumId.takeIf { it > 0L }?.let {
+
                         ContentUris.withAppendedId(
+
                             Uri.parse("content://media/external/audio/albumart"),
+
                             it
+
                         ).toString()
+
+                    },
+
+                    folderPath = run {
+
+                        val rawPath = if (dataColumn >= 0) cursor.getString(dataColumn) else null
+
+                        if (!rawPath.isNullOrBlank()) java.io.File(rawPath).parent.orEmpty() else "Almacenamiento interno"
+
+                    },
+
+                    folderName = run {
+                        val rawPath = if (dataColumn >= 0) cursor.getString(dataColumn) else null
+                        if (!rawPath.isNullOrBlank()) java.io.File(rawPath).parentFile?.name.orEmpty().ifBlank { "Musica" } else "Musica"
                     }
                 )
             }

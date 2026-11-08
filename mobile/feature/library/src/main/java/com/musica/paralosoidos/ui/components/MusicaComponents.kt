@@ -47,6 +47,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.musica.paralosoidos.data.FolderItem
+import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -257,9 +269,18 @@ fun PlaylistDetailHeader(
                 }
                 Spacer(Modifier.width(16.dp))
                 Column {
+                    val totalDurationMs = remember(selectedTracks) { selectedTracks.sumOf { it.durationMs } }
+                    val formattedDuration = remember(totalDurationMs) {
+                        val totalSec = totalDurationMs / 1000
+                        val hours = totalSec / 3600
+                        val minutes = (totalSec % 3600) / 60
+                        val seconds = totalSec % 60
+                        if (hours > 0) String.format(Locale.ROOT, "%02d:%02d:%02d", hours, minutes, seconds)
+                        else String.format(Locale.ROOT, "%02d:%02d", minutes, seconds)
+                    }
                     Text(playlist.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "${selectedTracks.size} canciones en total",
+                        "${selectedTracks.size} canciones en total • $formattedDuration duración total",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -274,28 +295,32 @@ fun PlaylistDetailHeader(
             Button(
                 onClick = { onPlayAll(selectedTracks) },
                 enabled = selectedTracks.isNotEmpty(),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Reproducir")
+                Spacer(Modifier.width(4.dp))
+                Text("Reproducir", maxLines = 1, softWrap = false)
             }
             OutlinedButton(
                 onClick = { onShuffle(selectedTracks) },
                 enabled = selectedTracks.isNotEmpty(),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
             ) {
                 Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Aleatorio")
+                Spacer(Modifier.width(4.dp))
+                Text("Aleatorio", maxLines = 1, softWrap = false)
             }
             Button(
                 onClick = onAddSongsClick,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Añadir")
+                Text("Añadir", maxLines = 1, softWrap = false)
             }
         }
     }
@@ -337,12 +362,13 @@ fun PlaylistTrackRow(
     onMoveDown: () -> Unit,
     onRemove: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MusicaStyle.Shape.tiny)
             .clickable(onClick = onPlay)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -350,8 +376,32 @@ fun PlaylistTrackRow(
             style = MaterialTheme.typography.bodySmall,
             color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier.width(28.dp)
+            modifier = Modifier.width(24.dp)
         )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(MusicaStyle.Shape.micro)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!track.artworkUri.isNullOrBlank()) {
+                AsyncImage(
+                    model = track.artworkUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    Icons.Default.MusicNote,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 track.title,
@@ -367,14 +417,155 @@ fun PlaylistTrackRow(
                 maxLines = 1
             )
         }
-        IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.ArrowUpward, contentDescription = "Subir pista", modifier = Modifier.size(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (canMoveUp) {
+                IconButton(onClick = onMoveUp, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.ArrowUpward, contentDescription = "Subir pista", modifier = Modifier.size(16.dp))
+                }
+            }
+            if (canMoveDown) {
+                IconButton(onClick = onMoveDown, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.ArrowDownward, contentDescription = "Bajar pista", modifier = Modifier.size(16.dp))
+                }
+            }
+            Icon(
+                Icons.Default.DragHandle,
+                contentDescription = "Reordenar pista",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.padding(horizontal = 4.dp).size(20.dp)
+            )
+            Box {
+                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Opciones", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    modifier = Modifier.background(MusicaStyle.Colors.menuBackgroundAlt)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Quitar de la lista", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onRemove()
+                        }
+                    )
+                }
+            }
         }
-        IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.ArrowDownward, contentDescription = "Bajar pista", modifier = Modifier.size(16.dp))
-        }
-        IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Close, contentDescription = "Quitar de lista", modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+fun FolderRow(
+    folder: FolderItem,
+    onClick: () -> Unit,
+    onToggleHidden: (Boolean) -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val alpha = if (folder.isHidden) 0.45f else 1f
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MusicaStyle.Shape.row,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (folder.isHidden) MusicaStyle.Colors.border.copy(alpha = 0.3f) else MusicaStyle.Colors.border
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(MusicaStyle.Shape.medium)
+                    .background(
+                        if (folder.isHidden) MaterialTheme.colorScheme.surfaceVariant
+                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Folder,
+                    contentDescription = null,
+                    tint = if (folder.isHidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        folder.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+                        maxLines = 1
+                    )
+                    if (folder.isHidden) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "(Oculta)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+                Text(
+                    folder.path,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha * 0.8f),
+                    maxLines = 1
+                )
+                Text(
+                    "${folder.trackCount} canciones",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = alpha)
+                )
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Opciones de carpeta",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    modifier = Modifier.background(MusicaStyle.Colors.menuBackgroundAlt)
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (folder.isHidden) "Mostrar carpeta" else "Ocultar carpeta",
+                                color = if (folder.isHidden) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (folder.isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = null,
+                                tint = if (folder.isHidden) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onToggleHidden(!folder.isHidden)
+                        }
+                    )
+                }
+            }
         }
     }
 }

@@ -27,6 +27,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
+import com.musica.paralosoidos.ui.downloader.DownloaderScreen
+import com.musica.paralosoidos.ui.downloader.DownloaderViewModel
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -97,6 +100,9 @@ import com.musica.paralosoidos.ui.LyricsSettingsSection
 import com.musica.paralosoidos.ui.ThemeSettingsSection
 import com.musica.paralosoidos.ui.components.AddTracksToPlaylistDialog
 import com.musica.paralosoidos.ui.components.EmptyLibrary
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
+import com.musica.paralosoidos.ui.components.FolderRow
 import com.musica.paralosoidos.ui.components.PlaylistDetailHeader
 import com.musica.paralosoidos.ui.components.PlaylistGalleryCard
 import com.musica.paralosoidos.ui.components.PlaylistImportConflictDialog
@@ -120,11 +126,12 @@ import kotlinx.coroutines.withContext
 private enum class AppTab(val label: String) {
     Home("Inicio"),
     Library("Biblioteca"),
+    Download("Descargar"),
     Equalizer("Ecualizador"),
     Settings("Ajustes");
 
     companion object {
-        val visibleTabs = listOf(Home, Library, Equalizer, Settings)
+        val visibleTabs = listOf(Home, Library, Download, Equalizer, Settings)
     }
 }
 
@@ -137,6 +144,7 @@ fun MusicaRoot(
     requestAudioPermission: () -> Unit
 ) {
     val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(container.libraryRepository))
+    val downloaderViewModel: DownloaderViewModel = viewModel(factory = DownloaderViewModel.Factory(container.downloadSettings, container.networkMonitor, container.downloadQueueManager))
     val tracks by libraryViewModel.tracks.collectAsStateWithLifecycle()
     val themeSettings by libraryViewModel.themeSettings.collectAsStateWithLifecycle()
     val customEqPresets by libraryViewModel.customEqPresets.collectAsStateWithLifecycle()
@@ -149,6 +157,17 @@ fun MusicaRoot(
     val scanMessage by libraryViewModel.scanMessage.collectAsStateWithLifecycle()
     val filteredTracks by libraryViewModel.filteredTracks.collectAsStateWithLifecycle()
     val albums by libraryViewModel.albums.collectAsStateWithLifecycle()
+    val visibleTracks by libraryViewModel.visibleTracks.collectAsStateWithLifecycle()
+    val folderItems by libraryViewModel.folderItems.collectAsStateWithLifecycle()
+    var selectedFolderPath by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedFolderTracks = remember(tracks, selectedFolderPath) { tracks.filter { it.folderPath == selectedFolderPath } }
+    val eqEnabled by container.preferences.eqEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val activeEqPreset by container.preferences.activeEqPreset.collectAsStateWithLifecycle(initialValue = "Plano (Fidelidad de Estudio)")
+    val eqBands by container.preferences.eqBands.collectAsStateWithLifecycle(initialValue = List(10) { 0 })
+    val bassBoost by container.preferences.bassBoost.collectAsStateWithLifecycle(initialValue = 0)
+    val virtualizer by container.preferences.virtualizer.collectAsStateWithLifecycle(initialValue = 0)
+    val speakerBoost by container.preferences.speakerBoost.collectAsStateWithLifecycle(initialValue = 0)
+    val mediaVolume by container.preferences.mediaVolume.collectAsStateWithLifecycle(initialValue = 100f)
 
     val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container.libraryRepository))
     val nowPlaying by playbackViewModel.nowPlaying.collectAsStateWithLifecycle()
@@ -173,6 +192,10 @@ fun MusicaRoot(
 
     BackHandler(enabled = showPlayer) {
         showPlayer = false
+    }
+
+    BackHandler(enabled = selectedFolderPath != null) {
+        selectedFolderPath = null
     }
 
     var showNewPlaylistDialog by rememberSaveable { mutableStateOf(false) }
@@ -290,6 +313,33 @@ fun MusicaRoot(
         AudioEffectsManager.setOutputProfile(storedOutputProfileId)
     }
 
+    var eqRestored by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(controller, eqEnabled, activeEqPreset, eqBands, bassBoost, virtualizer, speakerBoost) {
+        if (!eqRestored && controller != null) {
+            AudioEffectsManager.restoreState(
+                enabled = eqEnabled,
+                preset = activeEqPreset,
+                bands = eqBands,
+                bassStrength = bassBoost,
+                virtualizerStrength = virtualizer,
+                speakerBoost = speakerBoost
+            )
+            controller.volume = (mediaVolume / 100f).coerceIn(0f, 1f)
+            eqRestored = true
+        }
+    }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && audioGranted) {
+                libraryViewModel.verifyAndSyncAudioMismatch()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     fun saveOutputProfile(profileId: String) {
         AudioEffectsManager.setOutputProfile(profileId)
         audioOutputProfileMessage = null
@@ -371,6 +421,7 @@ fun MusicaRoot(
                         val icon = when (tab) {
                             AppTab.Home -> Icons.Default.MusicNote
                             AppTab.Library -> Icons.AutoMirrored.Filled.QueueMusic
+                            AppTab.Download -> Icons.Default.Download
                             AppTab.Equalizer -> Icons.Default.Tune
                             AppTab.Settings -> Icons.Default.Palette
                         }
@@ -553,21 +604,20 @@ fun MusicaRoot(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             SectionTitle("Biblioteca", "${filteredTracks.size} de ${tracks.size} pistas")
-                            Button(
+                            IconButton(
                                 onClick = {
                                     if (!hasAudioPermission()) requestAudioPermission()
                                     else libraryViewModel.refreshLibrary(force = true)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                }
                             ) {
-                                Text("Actualizar", color = Color.Black, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Refresh, contentDescription = "Actualizar biblioteca", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
 
                     item {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("Pistas", "Álbumes", "Listas").forEach { section ->
+                            listOf("Pistas", "Álbumes", "Listas", "Carpetas").forEach { section ->
                                 FilterChip(
                                     selected = librarySubTab == section,
                                     onClick = { libraryViewModel.setLibrarySubTab(section) },
@@ -609,6 +659,73 @@ fun MusicaRoot(
                                         Icon(Icons.Default.PlayArrow, contentDescription = "Reproducir álbum")
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    if (librarySubTab == "Carpetas") {
+                        if (selectedFolderPath == null) {
+                            if (folderItems.isEmpty()) {
+                                item { Text("No hay carpetas de música disponibles.") }
+                            } else {
+                                items(folderItems, key = { "folder-${it.path}" }) { folder ->
+                                    FolderRow(
+                                        folder = folder,
+                                        onClick = { selectedFolderPath = folder.path },
+                                        onToggleHidden = { hidden ->
+                                            libraryViewModel.setFolderHidden(folder.path, hidden)
+                                        }
+                                    )
+                                }
+                            }
+                        } else {
+                            val currentFolder = folderItems.firstOrNull { it.path == selectedFolderPath }
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = MusicaStyle.Shape.row,
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                    border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
+                                ) {
+                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(onClick = { selectedFolderPath = null }) {
+                                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                                            }
+                                            Spacer(Modifier.width(8.dp))
+                                            Column(Modifier.weight(1f)) {
+                                                Text(
+                                                    currentFolder?.name ?: "Carpeta",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    "${selectedFolderTracks.size} canciones • $selectedFolderPath",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+                                        Button(
+                                            onClick = {
+                                                if (selectedFolderTracks.isNotEmpty()) playbackViewModel.playTrack(selectedFolderTracks.first(), selectedFolderTracks)
+                                            },
+                                            enabled = selectedFolderTracks.isNotEmpty(),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Reproducir carpeta")
+                                        }
+                                    }
+                                }
+                            }
+                            items(selectedFolderTracks, key = { "fld-trk-${it.id}" }) { track ->
+                                TrackRow(
+                                    track = track,
+                                    onClick = { playbackViewModel.playTrack(track, selectedFolderTracks) }
+                                )
                             }
                         }
                     }
@@ -847,6 +964,12 @@ fun MusicaRoot(
                     }
                 }
 
+                AppTab.Download -> {
+                    item {
+                        DownloaderScreen(viewModel = downloaderViewModel)
+                    }
+                }
+
                 AppTab.Equalizer -> {
                     item {
                         EqualizerScreenContent(
@@ -855,6 +978,20 @@ fun MusicaRoot(
                             outputProfileMessage = audioOutputProfileMessage,
                             onSaveCustomPreset = { preset ->
                                 libraryViewModel.saveCustomEqPreset(preset) { themeMessage = it }
+                            },
+                            initialMediaVolume = mediaVolume,
+                            onMediaVolumeChange = { vol ->
+                                coroutineScope.launch { container.preferences.saveMediaVolume(vol) }
+                            },
+                            onPersistEqSettings = {
+                                coroutineScope.launch {
+                                    container.preferences.saveEqEnabled(AudioEffectsManager.isEnabled.value)
+                                    container.preferences.saveActiveEqPreset(AudioEffectsManager.selectedPreset.value)
+                                    container.preferences.saveEqBands(AudioEffectsManager.bands.value)
+                                    container.preferences.saveBassBoost(AudioEffectsManager.bassStrength.value)
+                                    container.preferences.saveVirtualizer(AudioEffectsManager.virtualizerStrength.value)
+                                    container.preferences.saveSpeakerBoost(AudioEffectsManager.speakerBoost.value)
+                                }
                             }
                         )
                     }

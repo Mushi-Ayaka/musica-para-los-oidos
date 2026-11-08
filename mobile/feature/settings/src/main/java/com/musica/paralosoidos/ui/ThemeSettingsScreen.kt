@@ -512,6 +512,92 @@ private fun CustomColorPickerDialog(
                     )
                 }
 
+                val paletteColors = remember {
+                    listOf(
+                        "#EF4444", "#F97316", "#F59E0B", "#10B981", "#06B6D4", "#3B82F6",
+                        "#6366F1", "#8B5CF6", "#EC4899", "#F43F5E", "#14B8A6", "#84CC16",
+                        "#FFFFFF", "#D1D5DB", "#6B7280", "#374151", "#1E1E24", "#0A0A0C"
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Paleta rápida", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        paletteColors.take(6).forEach { hex ->
+                            val colorInt = android.graphics.Color.parseColor(hex)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(30.dp)
+                                    .clip(MusicaStyle.Shape.micro)
+                                    .background(Color(colorInt))
+                                    .border(
+                                        if (currentHex.equals(hex, ignoreCase = true)) 2.dp else 1.dp,
+                                        if (currentHex.equals(hex, ignoreCase = true)) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.overlay,
+                                        MusicaStyle.Shape.micro
+                                    )
+                                    .clickable {
+                                        val hsv = FloatArray(3)
+                                        android.graphics.Color.colorToHSV(colorInt, hsv)
+                                        hue = hsv[0]
+                                        saturation = hsv[1]
+                                        valueBrightness = hsv[2]
+                                        hexInput = hex
+                                    }
+                            )
+                        }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        paletteColors.drop(6).take(6).forEach { hex ->
+                            val colorInt = android.graphics.Color.parseColor(hex)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(30.dp)
+                                    .clip(MusicaStyle.Shape.micro)
+                                    .background(Color(colorInt))
+                                    .border(
+                                        if (currentHex.equals(hex, ignoreCase = true)) 2.dp else 1.dp,
+                                        if (currentHex.equals(hex, ignoreCase = true)) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.overlay,
+                                        MusicaStyle.Shape.micro
+                                    )
+                                    .clickable {
+                                        val hsv = FloatArray(3)
+                                        android.graphics.Color.colorToHSV(colorInt, hsv)
+                                        hue = hsv[0]
+                                        saturation = hsv[1]
+                                        valueBrightness = hsv[2]
+                                        hexInput = hex
+                                    }
+                            )
+                        }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        paletteColors.drop(12).forEach { hex ->
+                            val colorInt = android.graphics.Color.parseColor(hex)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(30.dp)
+                                    .clip(MusicaStyle.Shape.micro)
+                                    .background(Color(colorInt))
+                                    .border(
+                                        if (currentHex.equals(hex, ignoreCase = true)) 2.dp else 1.dp,
+                                        if (currentHex.equals(hex, ignoreCase = true)) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.overlay,
+                                        MusicaStyle.Shape.micro
+                                    )
+                                    .clickable {
+                                        val hsv = FloatArray(3)
+                                        android.graphics.Color.colorToHSV(colorInt, hsv)
+                                        hue = hsv[0]
+                                        saturation = hsv[1]
+                                        valueBrightness = hsv[2]
+                                        hexInput = hex
+                                    }
+                            )
+                        }
+                    }
+                }
+
                 ColorSlider(
                     label = "Tono",
                     valueText = "${hue.toInt()}°",

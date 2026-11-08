@@ -1,6 +1,7 @@
 package com.musica.paralosoidos.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -12,14 +13,10 @@ private val Context.downloadSettingsDataStore by preferencesDataStore(name = "do
 
 const val PUBLIC_MUSIC_FOLDER = "Music/Musica para los Oídos"
 
-enum class AudioOutputFormat(val key: String, val label: String) {
-    BEST("best", "Mejor calidad disponible (formato original)"),
-    MP3("mp3", "MP3")
-}
-
 data class DownloadSettingsState(
     val format: AudioOutputFormat? = null,
-    val mp3Bitrate: Int? = null
+    val mp3Bitrate: Int? = null,
+    val syncLyrics: Boolean = true
 ) {
     val isConfigured: Boolean
         get() = format == AudioOutputFormat.BEST ||
@@ -38,11 +35,12 @@ class DownloadSettings(context: Context) {
             format = AudioOutputFormat.entries.firstOrNull {
                 it.key == preferences[FORMAT_KEY]
             },
-            mp3Bitrate = preferences[MP3_BITRATE_KEY]
+            mp3Bitrate = preferences[MP3_BITRATE_KEY],
+            syncLyrics = preferences[SYNC_LYRICS_KEY] ?: true
         )
     }
 
-    suspend fun save(format: AudioOutputFormat?, mp3Bitrate: Int?) {
+    suspend fun save(format: AudioOutputFormat?, mp3Bitrate: Int?, syncLyrics: Boolean? = null) {
         require(mp3Bitrate == null || mp3Bitrate in DownloadSettingsState.MP3_BITRATES) {
             "La calidad de MP3 seleccionada no es válida."
         }
@@ -57,17 +55,27 @@ class DownloadSettings(context: Context) {
             } else {
                 preferences[MP3_BITRATE_KEY] = mp3Bitrate
             }
+            if (syncLyrics != null) {
+                preferences[SYNC_LYRICS_KEY] = syncLyrics
+            }
         }
     }
 
-    suspend fun restore(formatKey: String?, mp3Bitrate: Int?) {
+    suspend fun saveSyncLyrics(syncLyrics: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[SYNC_LYRICS_KEY] = syncLyrics
+        }
+    }
+
+    suspend fun restore(formatKey: String?, mp3Bitrate: Int?, syncLyrics: Boolean? = true) {
         val format = AudioOutputFormat.entries.firstOrNull { it.key == formatKey }
         val bitrate = mp3Bitrate?.takeIf { it in DownloadSettingsState.MP3_BITRATES }
-        save(format, bitrate)
+        save(format, bitrate, syncLyrics)
     }
 
     private companion object {
         val FORMAT_KEY = stringPreferencesKey("audio_format")
         val MP3_BITRATE_KEY = intPreferencesKey("mp3_bitrate")
+        val SYNC_LYRICS_KEY = booleanPreferencesKey("sync_lyrics")
     }
 }

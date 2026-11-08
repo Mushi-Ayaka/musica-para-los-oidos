@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.musica.paralosoidos.data.LibraryRepository
+import com.musica.paralosoidos.data.FolderItem
 import com.musica.paralosoidos.data.MusicPlaylist
 import com.musica.paralosoidos.data.SavedEqPreset
 import com.musica.paralosoidos.data.ThemeSettingsState
@@ -20,6 +21,12 @@ import kotlinx.coroutines.launch
 
 class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() {
     val tracks: StateFlow<List<TrackEntity>> = repository.tracks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val visibleTracks: StateFlow<List<TrackEntity>> = repository.visibleTracks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val folderItems: StateFlow<List<FolderItem>> = repository.folderItems
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val playlists: StateFlow<List<MusicPlaylist>> = repository.playlists
@@ -49,7 +56,7 @@ class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() 
     private val _scanMessage = MutableStateFlow<String?>(null)
     val scanMessage: StateFlow<String?> = _scanMessage.asStateFlow()
 
-    private val indexedTracks = tracks.map(TrackFilter::index)
+    private val indexedTracks = visibleTracks.map(TrackFilter::index)
 
     val filteredTracks: StateFlow<List<TrackEntity>> = combine(
         indexedTracks,
@@ -60,7 +67,7 @@ class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() 
         TrackFilter.apply(source, query, order, letter)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val albums: StateFlow<List<Pair<String, List<TrackEntity>>>> = tracks.map { list ->
+    val albums: StateFlow<List<Pair<String, List<TrackEntity>>>> = visibleTracks.map { list ->
         list.filter { it.album.isNotBlank() }
             .groupBy { it.album }
             .toList()
@@ -123,6 +130,40 @@ class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() 
                 .onFailure {
                     onMessage("No se pudo eliminar la lista: ${it.localizedMessage ?: "error desconocido"}")
                 }
+        }
+    }
+
+    fun setFolderHidden(folderPath: String, hidden: Boolean) {
+        viewModelScope.launch {
+            repository.setFolderHidden(folderPath, hidden)
+        }
+    }
+
+    fun verifyAndSyncAudioMismatch() {
+        viewModelScope.launch {
+            repository.verifyAndSyncAudioMismatch()
+        }
+    }
+
+    fun reorderPlaylistTrack(
+        playlistId: String,
+        fromIndex: Int,
+        toIndex: Int,
+        onMessage: (String?) -> Unit = {}
+    ) {
+        val playlist = playlists.value.firstOrNull { it.id == playlistId } ?: return
+        val updatedIds = playlist.trackIds.toMutableList()
+        if (fromIndex !in updatedIds.indices || toIndex !in updatedIds.indices || fromIndex == toIndex) return
+        val moved = updatedIds.removeAt(fromIndex)
+        updatedIds.add(toIndex, moved)
+        viewModelScope.launch {
+            runCatching {
+                repository.savePlaylists(
+                    playlists.value.map { if (it.id == playlistId) it.copy(trackIds = updatedIds) else it }
+                )
+            }.onFailure {
+                onMessage("No se pudo reordenar la pista: ${it.localizedMessage ?: "error desconocido"}")
+            }
         }
     }
 

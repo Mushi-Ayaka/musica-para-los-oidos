@@ -69,7 +69,10 @@ fun EqualizerScreenContent(
     controller: MediaController?,
     onOutputProfileSelected: (String) -> Unit,
     outputProfileMessage: String?,
-    onSaveCustomPreset: (com.musica.paralosoidos.data.SavedEqPreset) -> Unit
+    onSaveCustomPreset: (com.musica.paralosoidos.data.SavedEqPreset) -> Unit,
+    initialMediaVolume: Float = 100f,
+    onMediaVolumeChange: (Float) -> Unit = {},
+    onPersistEqSettings: () -> Unit = {}
 ) {
     val bands by AudioEffectsManager.bands.collectAsState()
     val bassStrength by AudioEffectsManager.bassStrength.collectAsState()
@@ -78,7 +81,7 @@ fun EqualizerScreenContent(
     val audioStatus by AudioEffectsManager.status.collectAsState()
     val isEnabled by AudioEffectsManager.isEnabled.collectAsState()
     val speakerBoost by AudioEffectsManager.speakerBoost.collectAsState()
-    var normalVolume by remember { mutableFloatStateOf(100f) }
+    var normalVolume by remember(initialMediaVolume) { mutableFloatStateOf(initialMediaVolume) }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -103,7 +106,7 @@ fun EqualizerScreenContent(
                         if (isEnabled) MaterialTheme.colorScheme.primary
                         else MusicaStyle.Colors.borderStrong
                     )
-                    .clickable { AudioEffectsManager.setEnabled(!isEnabled) }
+                    .clickable { AudioEffectsManager.setEnabled(!isEnabled); onPersistEqSettings() }
                     .padding(horizontal = 14.dp, vertical = 6.dp)
             ) {
                 Text(
@@ -140,6 +143,7 @@ fun EqualizerScreenContent(
                 onValueChange = {
                     normalVolume = it
                     controller?.volume = (it / 100f).coerceIn(0f, 1f)
+                    onMediaVolumeChange(it)
                 },
                 valueRange = 0f..100f,
                 colors = SliderDefaults.colors(
@@ -180,7 +184,7 @@ fun EqualizerScreenContent(
             }
             Slider(
                 value = speakerBoost.toFloat(),
-                onValueChange = { AudioEffectsManager.setSpeakerBoost(it.toInt()) },
+                onValueChange = { AudioEffectsManager.setSpeakerBoost(it.toInt()); onPersistEqSettings() },
                 valueRange = 0f..100f,
                 colors = SliderDefaults.colors(
                     thumbColor = MusicaStyle.Colors.gold,
@@ -254,7 +258,7 @@ fun EqualizerScreenContent(
                                     )
                                 },
                                 onClick = {
-                                    if (preset != "Personalizado") AudioEffectsManager.applyPreset(preset)
+                                    if (preset != "Personalizado") { AudioEffectsManager.applyPreset(preset); onPersistEqSettings() }
                                     presetMenuExpanded = false
                                 }
                             )
@@ -339,7 +343,7 @@ fun EqualizerScreenContent(
                             )
                             VerticalEqualizerSlider(
                                 value = gain,
-                                onValueChange = { AudioEffectsManager.setBandGain(index, it) },
+                                onValueChange = { AudioEffectsManager.setBandGain(index, it); onPersistEqSettings() },
                                 modifier = Modifier.weight(1f).fillMaxSize()
                             )
                             Text(freqLabel, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
@@ -373,7 +377,7 @@ fun EqualizerScreenContent(
                     )
                     Slider(
                         value = bassStrength.toFloat(),
-                        onValueChange = { AudioEffectsManager.setBassBoost(it.toInt()) },
+                        onValueChange = { AudioEffectsManager.setBassBoost(it.toInt()); onPersistEqSettings() },
                         valueRange = 0f..12f,
                         steps = 11,
                         colors = SliderDefaults.colors(
@@ -405,7 +409,7 @@ fun EqualizerScreenContent(
                     )
                     Slider(
                         value = virtualizerStrength.toFloat(),
-                        onValueChange = { AudioEffectsManager.setVirtualizer(it.toInt()) },
+                        onValueChange = { AudioEffectsManager.setVirtualizer(it.toInt()); onPersistEqSettings() },
                         valueRange = 0f..100f,
                         enabled = virtualizerAvailable,
                         colors = SliderDefaults.colors(

@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TrackEntity::class, BackupStateEntity::class, CatalogTrackEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
@@ -40,6 +40,12 @@ abstract class MusicDatabase : RoomDatabase() {
                         "album TEXT NOT NULL, durationMs INTEGER NOT NULL, youtubeUrl TEXT, " +
                         "localUri TEXT, metadataJson TEXT NOT NULL)"
                 )
+            }
+        }
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE audio_tracks ADD COLUMN folderPath TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE audio_tracks ADD COLUMN folderName TEXT NOT NULL DEFAULT ''")
             }
         }
     }

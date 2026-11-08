@@ -48,6 +48,13 @@ class MainActivity : ComponentActivity() {
             val themeSettings by container.preferences.themeSettings.collectAsStateWithLifecycle(
                 initialValue = com.musica.paralosoidos.data.ThemeSettingsState()
             )
+            androidx.compose.runtime.SideEffect {
+                runCatching {
+                    window.decorView.setBackgroundColor(
+                        android.graphics.Color.parseColor(themeSettings.backgroundColor)
+                    )
+                }
+            }
             MusicaTheme(settings = themeSettings) {
                 MusicaRoot(
                     container = container,
