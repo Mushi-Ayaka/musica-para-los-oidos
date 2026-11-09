@@ -34,6 +34,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +44,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.platform.LocalContext
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import com.musica.paralosoidos.data.DownloadHistoryEntity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +74,7 @@ fun DownloaderScreen(
     val queue by viewModel.queue.collectAsStateWithLifecycle()
     val activeCount by viewModel.activeCount.collectAsStateWithLifecycle()
     val isQueueSheetOpen by viewModel.isQueueSheetOpen.collectAsStateWithLifecycle()
+    val downloadHistory by viewModel.downloadHistory.collectAsStateWithLifecycle()
 
     val canPerformActions = isOnline && !isServiceBlocked
     val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -300,6 +315,45 @@ fun DownloaderScreen(
         }
     }
 
+    // Download History Section
+    if (downloadHistory.isNotEmpty()) {
+        val historyExpanded = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { historyExpanded.value = !historyExpanded.value }
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.History,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Historial de descargas (${downloadHistory.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                if (historyExpanded.value) "Ocultar" else "Ver todo",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        if (historyExpanded.value) {
+            downloadHistory.take(20).forEach { item ->
+                DownloadHistoryItem(item = item)
+            }
+        }
+    }
+
     // Modal Bottom Sheet for Queue
     if (isQueueSheetOpen) {
         DownloadQueueSheet(
@@ -313,4 +367,96 @@ fun DownloaderScreen(
             onClearCompleted = viewModel::clearCompletedTasks
         )
     }
+}
+
+
+@Composable
+private fun DownloadHistoryItem(
+    item: DownloadHistoryEntity,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val lrcFile = remember(item.filePath) {
+        val mp3 = File(item.filePath)
+        File(mp3.parent ?: "", mp3.nameWithoutExtension + ".lrc")
+    }
+    val hasLrc = remember(lrcFile) { lrcFile.exists() }
+    val dateStr = remember(item.downloadedAt) {
+        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(item.downloadedAt))
+    }
+    val qualityLabel = if (item.format == "MP3" && item.bitrate != null) {
+        "MP3 ${item.bitrate}K"
+    } else {
+        item.format
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        item.channel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Text(
+                        qualityLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                Text(
+                    dateStr,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+            if (hasLrc) {
+                Box(
+                    modifier = Modifier
+                        .background(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        "Letra",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(4.dp))
 }

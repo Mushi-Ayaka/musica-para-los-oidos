@@ -6,14 +6,15 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [TrackEntity::class, BackupStateEntity::class, CatalogTrackEntity::class],
-    version = 5,
+    entities = [TrackEntity::class, BackupStateEntity::class, CatalogTrackEntity::class, DownloadHistoryEntity::class],
+    version = 7,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
     abstract fun trackDao(): TrackDao
     abstract fun backupStateDao(): BackupStateDao
     abstract fun catalogTrackDao(): CatalogTrackDao
+    abstract fun downloadHistoryDao(): DownloadHistoryDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -46,6 +47,23 @@ abstract class MusicDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE audio_tracks ADD COLUMN folderPath TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE audio_tracks ADD COLUMN folderName TEXT NOT NULL DEFAULT ''")
+            }
+        }
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `download_history` " +
+                    "(`id` TEXT NOT NULL, `videoId` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                    "`channel` TEXT NOT NULL, `format` TEXT NOT NULL, `bitrate` INTEGER, " +
+                    "`filePath` TEXT NOT NULL, `downloadedAt` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE catalog_tracks ADD COLUMN lrcPath TEXT")
+                db.execSQL("ALTER TABLE catalog_tracks ADD COLUMN lrcSynced INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

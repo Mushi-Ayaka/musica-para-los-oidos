@@ -215,9 +215,12 @@ fun DownloadTaskCard(
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    if (task.thumbnailUrl.isNotBlank()) {
+                    val thumbModel = task.thumbnailUrl.ifBlank {
+                        if (task.videoId.isNotBlank()) "https://img.youtube.com/vi/${task.videoId}/hqdefault.jpg" else ""
+                    }
+                    if (thumbModel.isNotBlank()) {
                         AsyncImage(
-                            model = task.thumbnailUrl,
+                            model = thumbModel,
                             contentDescription = task.title,
                             modifier = Modifier.matchParentSize(),
                             contentScale = ContentScale.Crop

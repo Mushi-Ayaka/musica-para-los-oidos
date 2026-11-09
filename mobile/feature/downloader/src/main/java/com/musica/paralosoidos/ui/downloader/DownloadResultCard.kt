@@ -93,9 +93,12 @@ fun DownloadResultCard(
                         .clip(RoundedCornerShape(10.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    if (result.thumbnailUrl.isNotBlank()) {
+                    val thumbnailModel = result.thumbnailUrl.ifBlank {
+                        if (result.id.isNotBlank()) "https://img.youtube.com/vi/${result.id}/hqdefault.jpg" else null
+                    }
+                    if (thumbnailModel != null) {
                         AsyncImage(
-                            model = result.thumbnailUrl,
+                            model = thumbnailModel,
                             contentDescription = result.title,
                             modifier = Modifier.matchParentSize(),
                             contentScale = ContentScale.Crop
@@ -110,6 +113,25 @@ fun DownloadResultCard(
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                 modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+
+                    // LRC Badge (Bottom-Start)
+                    if (activeSettings.syncLyrics) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(4.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "LRC",
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }

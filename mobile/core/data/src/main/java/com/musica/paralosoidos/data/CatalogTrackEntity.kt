@@ -12,5 +12,7 @@ data class CatalogTrackEntity(
     val durationMs: Long,
     val youtubeUrl: String?,
     val localUri: String?,
-    val metadataJson: String
+    val metadataJson: String,
+    val lrcPath: String? = null,
+    val lrcSynced: Boolean = false
 )

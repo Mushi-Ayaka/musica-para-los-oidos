@@ -160,6 +160,21 @@ class DownloadNotificationManager(
         }
     }
 
+    fun showLrcAvailableNotification(trackId: String, title: String) {
+        val notificationId = ("lrc_$trackId".hashCode() and 0x7FFFFFFF)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle("Letra disponible")
+            .setContentText("Letra sincronizada encontrada para $title")
+            .setProgress(0, 0, false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+
+        runCatching {
+            notificationManager.notify(notificationId, builder.build())
+        }
+    }
+
     fun cancelNotification(taskId: String) {
         val notificationId = notificationIdMap.remove(taskId) ?: (taskId.hashCode() and 0x7FFFFFFF)
         runCatching {

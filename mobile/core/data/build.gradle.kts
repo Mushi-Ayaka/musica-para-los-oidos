@@ -33,6 +33,8 @@ dependencies {
     api(libs.kotlinx.serialization.json)
     implementation(libs.androidx.core.ktx)
     implementation(libs.okhttp)
+    api(libs.youtubedl.android.lib)
+    implementation(libs.youtubedl.android.ffmpeg)
 
     testImplementation(libs.junit)
 }

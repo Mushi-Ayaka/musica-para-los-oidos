@@ -202,6 +202,66 @@ class AppPreferences(context: Context) {
         }
     }
 
+    val trackerCircleColor: Flow<String> = dataStore.data.map { preferences ->
+        preferences[TRACKER_CIRCLE_COLOR_KEY] ?: "#FFFFFF"
+    }
+
+    suspend fun saveTrackerCircleColor(colorHex: String) {
+        dataStore.edit { preferences ->
+            preferences[TRACKER_CIRCLE_COLOR_KEY] = colorHex
+        }
+    }
+
+    val trackerFrequency: Flow<String> = dataStore.data.map { preferences ->
+        preferences[TRACKER_FREQUENCY_KEY] ?: "ON_NEW_TRACKS_ONLY"
+    }
+
+    suspend fun saveTrackerFrequency(frequency: String) {
+        dataStore.edit { preferences ->
+            preferences[TRACKER_FREQUENCY_KEY] = frequency
+        }
+    }
+
+    val trackerIntensity: Flow<String> = dataStore.data.map { preferences ->
+        preferences[TRACKER_INTENSITY_KEY] ?: "MEDIUM"
+    }
+
+    suspend fun saveTrackerIntensity(intensity: String) {
+        dataStore.edit { preferences ->
+            preferences[TRACKER_INTENSITY_KEY] = intensity
+        }
+    }
+
+    val downloadConcurrency: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[DOWNLOAD_CONCURRENCY_KEY] ?: 1
+    }
+
+    suspend fun saveDownloadConcurrency(concurrency: Int) {
+        dataStore.edit { preferences ->
+            preferences[DOWNLOAD_CONCURRENCY_KEY] = concurrency.coerceIn(1, 3)
+        }
+    }
+
+    val downloadRetryCount: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[DOWNLOAD_RETRY_COUNT_KEY] ?: 1
+    }
+
+    suspend fun saveDownloadRetryCount(count: Int) {
+        dataStore.edit { preferences ->
+            preferences[DOWNLOAD_RETRY_COUNT_KEY] = count.coerceIn(0, 3)
+        }
+    }
+
+    val autoBackupInterval: Flow<String> = dataStore.data.map { preferences ->
+        preferences[AUTO_BACKUP_INTERVAL_KEY] ?: "DAILY"
+    }
+
+    suspend fun saveAutoBackupInterval(interval: String) {
+        dataStore.edit { preferences ->
+            preferences[AUTO_BACKUP_INTERVAL_KEY] = interval
+        }
+    }
+
     private companion object {
         val THEME_KEY = stringPreferencesKey("theme_settings")
         val EQ_PRESETS_KEY = stringPreferencesKey("custom_eq_presets")
@@ -218,6 +278,12 @@ class AppPreferences(context: Context) {
         val VIRTUALIZER_KEY = intPreferencesKey("virtualizer")
         val SPEAKER_BOOST_KEY = intPreferencesKey("speaker_boost")
         val MEDIA_VOLUME_KEY = floatPreferencesKey("media_volume")
+        val TRACKER_CIRCLE_COLOR_KEY = stringPreferencesKey("tracker_circle_color")
+        val TRACKER_FREQUENCY_KEY = stringPreferencesKey("tracker_frequency")
+        val TRACKER_INTENSITY_KEY = stringPreferencesKey("tracker_intensity")
+        val DOWNLOAD_CONCURRENCY_KEY = intPreferencesKey("download_concurrency")
+        val DOWNLOAD_RETRY_COUNT_KEY = intPreferencesKey("download_retry_count")
+        val AUTO_BACKUP_INTERVAL_KEY = stringPreferencesKey("auto_backup_interval")
         val HEX_COLOR_PATTERN = Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
         val SUPPORTED_FONT_FAMILIES = setOf("jakarta", "system", "serif", "mono")
     }

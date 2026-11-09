@@ -1,9 +1,12 @@
 package com.musica.paralosoidos.ui.downloader
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.musica.paralosoidos.data.AudioOutputFormat
+import com.musica.paralosoidos.data.DownloadHistoryDao
+import com.musica.paralosoidos.data.DownloadHistoryEntity
 import com.musica.paralosoidos.data.DownloadQueueManager
 import com.musica.paralosoidos.data.DownloadSearchResult
 import com.musica.paralosoidos.data.DownloadSettings
@@ -11,6 +14,9 @@ import com.musica.paralosoidos.data.DownloadSettingsState
 import com.musica.paralosoidos.data.DownloadTask
 import com.musica.paralosoidos.data.DownloadTaskStatus
 import com.musica.paralosoidos.data.NetworkMonitor
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,12 +25,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class DownloaderViewModel(
+    private val context: Context,
     private val downloadSettings: DownloadSettings,
     private val networkMonitor: NetworkMonitor,
-    private val downloadQueueManager: DownloadQueueManager
+    private val downloadQueueManager: DownloadQueueManager,
+    private val downloadHistoryDao: DownloadHistoryDao
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -62,6 +71,9 @@ class DownloaderViewModel(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = DownloadSettingsState()
     )
+
+    val downloadHistory: StateFlow<List<DownloadHistoryEntity>> = downloadHistoryDao.observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var searchJob: Job? = null
 
@@ -108,33 +120,9 @@ class DownloaderViewModel(
                         )
                     )
                 } else {
-                    // Simulated search results for UI preview until backend extractor executes in Sprint 4
-                    listOf(
-                        DownloadSearchResult(
-                            id = "yt_1",
-                            title = "$trimmed - Audio Oficial",
-                            channel = "Artista Oficial",
-                            durationSeconds = 224,
-                            thumbnailUrl = "https://img.youtube.com/vi/default/hqdefault.jpg",
-                            viewCount = 2_450_000
-                        ),
-                        DownloadSearchResult(
-                            id = "yt_2",
-                            title = "$trimmed (En Vivo)",
-                            channel = "Vevo / Acustico",
-                            durationSeconds = 258,
-                            thumbnailUrl = "",
-                            viewCount = 680_000
-                        ),
-                        DownloadSearchResult(
-                            id = "yt_3",
-                            title = "$trimmed (Version Remasterizada)",
-                            channel = "Classic Hits",
-                            durationSeconds = 195,
-                            thumbnailUrl = "",
-                            viewCount = 120_000
-                        )
-                    )
+                    // Real search via yt-dlp
+                    val searchResults = performYoutubeSearch(trimmed)
+                    searchResults
                 }
                 _searchResults.value = results
             } catch (e: Exception) {
@@ -154,6 +142,46 @@ class DownloaderViewModel(
             }
         }
     }
+
+    private suspend fun performYoutubeSearch(query: String): List<DownloadSearchResult> =
+        withContext(Dispatchers.IO) {
+            val request = YoutubeDLRequest("ytsearch5:$query").apply {
+                addOption("--dump-json")
+                addOption("--flat-playlist")
+                addOption("--no-playlist")
+            }
+            val response = YoutubeDL.getInstance().execute(request)
+            val output = response.out.trim()
+            val results = mutableListOf<DownloadSearchResult>()
+            output.lines().forEach { line ->
+                val trimmedLine = line.trim()
+                if (trimmedLine.startsWith("{")) {
+                    runCatching {
+                        val json = org.json.JSONObject(trimmedLine)
+                        val id = json.optString("id", "")
+                        val title = json.optString("title", "Sin titulo")
+                        val channel = json.optString("uploader", json.optString("channel", "Desconocido"))
+                        val duration = json.optLong("duration", 0L).toInt()
+                        val rawThumb = json.optString("thumbnail", "")
+                        val thumbnail = if (rawThumb.isNotBlank()) rawThumb else "https://img.youtube.com/vi/$id/hqdefault.jpg"
+                        val viewCount = json.optLong("view_count", 0L)
+                        if (id.isNotBlank()) {
+                            results.add(
+                                DownloadSearchResult(
+                                    id = id,
+                                    title = title,
+                                    channel = channel,
+                                    durationSeconds = duration,
+                                    thumbnailUrl = thumbnail,
+                                    viewCount = viewCount
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+            results
+        }
 
     fun updateQuality(format: AudioOutputFormat, bitrate: Int?) {
         viewModelScope.launch {
@@ -239,13 +267,15 @@ class DownloaderViewModel(
     }
 
     class Factory(
+        private val context: Context,
         private val downloadSettings: DownloadSettings,
         private val networkMonitor: NetworkMonitor,
-        private val downloadQueueManager: DownloadQueueManager
+        private val downloadQueueManager: DownloadQueueManager,
+        private val downloadHistoryDao: DownloadHistoryDao
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DownloaderViewModel(downloadSettings, networkMonitor, downloadQueueManager) as T
+            return DownloaderViewModel(context, downloadSettings, networkMonitor, downloadQueueManager, downloadHistoryDao) as T
         }
     }
 }

@@ -1,5 +1,13 @@
 package com.musica.paralosoidos.ui
 
+import com.musica.paralosoidos.data.backup.PlaybackBackupState
+import com.musica.paralosoidos.ui.components.TrackLinksBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
+import java.io.File
+import kotlinx.coroutines.flow.first
+
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -42,6 +50,8 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -144,7 +154,7 @@ fun MusicaRoot(
     requestAudioPermission: () -> Unit
 ) {
     val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(container.libraryRepository))
-    val downloaderViewModel: DownloaderViewModel = viewModel(factory = DownloaderViewModel.Factory(container.downloadSettings, container.networkMonitor, container.downloadQueueManager))
+    val downloaderViewModel: DownloaderViewModel = viewModel(factory = DownloaderViewModel.Factory(androidx.compose.ui.platform.LocalContext.current.applicationContext, container.downloadSettings, container.networkMonitor, container.downloadQueueManager, container.downloadHistoryDao))
     val tracks by libraryViewModel.tracks.collectAsStateWithLifecycle()
     val themeSettings by libraryViewModel.themeSettings.collectAsStateWithLifecycle()
     val customEqPresets by libraryViewModel.customEqPresets.collectAsStateWithLifecycle()
@@ -189,6 +199,84 @@ fun MusicaRoot(
     var audioOutputProfileMessage by remember { mutableStateOf<String?>(null) }
     var showPlayer by rememberSaveable { mutableStateOf(false) }
     var themeMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var playlistMessage by remember { mutableStateOf<String?>(null) }
+
+    var missingTracksFromBackup by remember { mutableStateOf<List<com.musica.paralosoidos.data.backup.TrackMetadataBackup>?>(null) }
+    var trackerSyncProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var isTrackerSyncing by remember { mutableStateOf(false) }
+    var selectedTrackForLinks by remember { mutableStateOf<com.musica.paralosoidos.data.TrackEntity?>(null) }
+
+    val catalogTracks by container.catalogTracks.observeAll().collectAsStateWithLifecycle(emptyList())
+    val catalogMap = remember(catalogTracks) { catalogTracks.associateBy { it.localUri.orEmpty() } }
+    val trackerCircleColorHex by container.preferences.trackerCircleColor.collectAsStateWithLifecycle("#FFFFFF")
+    val trackerCircleColor = remember(trackerCircleColorHex) {
+        runCatching { Color(android.graphics.Color.parseColor(trackerCircleColorHex)) }.getOrDefault(Color.White)
+    }
+
+    val trackerFrequency by container.preferences.trackerFrequency.collectAsStateWithLifecycle("ON_NEW_TRACKS_ONLY")
+    val trackerIntensity by container.preferences.trackerIntensity.collectAsStateWithLifecycle("MEDIUM")
+    val downloadConcurrency by container.preferences.downloadConcurrency.collectAsStateWithLifecycle(1)
+    val downloadRetryCount by container.preferences.downloadRetryCount.collectAsStateWithLifecycle(1)
+    val autoBackupInterval by container.preferences.autoBackupInterval.collectAsStateWithLifecycle("DAILY")
+
+    LaunchedEffect(tracks) {
+        if (tracks.isNotEmpty()) {
+            val freq = container.preferences.trackerFrequency.first()
+            if (freq == "ON_APP_OPEN" || freq == "ON_NEW_TRACKS_ONLY") {
+                container.trackTrackerManager.runAutoTracking(tracks)
+            }
+        }
+    }
+
+    val exportCentralBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                runCatching {
+                    val currentPlayback = PlaybackBackupState(
+                        queueUris = playbackQueue.map { it.uri },
+                        queueTrackTitles = playbackQueue.map { it.title },
+                        currentTrackUri = nowPlaying?.uri,
+                        currentTrackTitle = nowPlaying?.title,
+                        currentPositionMs = position.toLong()
+                    )
+                    val jsonStr = container.centralBackupManager.exportBundle(currentPlayback)
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use {
+                            it.write(jsonStr)
+                        } ?: error("No se pudo escribir en el archivo.")
+                    }
+                }.onSuccess { playlistMessage = "Copia completa exportada con exito." }
+                    .onFailure { playlistMessage = "Error al exportar copia: ${it.localizedMessage ?: "error desconocido"}" }
+            }
+        }
+    }
+
+    val importCentralBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                runCatching {
+                    val content = withContext(Dispatchers.IO) {
+                        val stream = context.contentResolver.openInputStream(uri)
+                            ?: error("No se pudo leer el archivo.")
+                        stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    }
+                    val result = container.centralBackupManager.importBundle(content)
+                    playlistMessage = "Copia restaurada: ${result.playlistCount} listas y ${result.trackMetadataCount} pistas procesadas."
+                    if (result.missingLinkedTracks.isNotEmpty()) {
+                        missingTracksFromBackup = result.missingLinkedTracks
+                    }
+                }.onFailure {
+                    playlistMessage = "Error al importar copia: ${it.localizedMessage ?: "formato invalido"}"
+                }
+            }
+        }
+    }
 
     BackHandler(enabled = showPlayer) {
         showPlayer = false
@@ -200,11 +288,7 @@ fun MusicaRoot(
 
     var showNewPlaylistDialog by rememberSaveable { mutableStateOf(false) }
     var newPlaylistName by rememberSaveable { mutableStateOf("") }
-    var playlistMessage by remember { mutableStateOf<String?>(null) }
     val autoBackupMessage by container.autoBackup.lastMessage.collectAsStateWithLifecycle()
-
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
     val updateViewModel: UpdateViewModel = viewModel(
         factory = UpdateViewModel.Factory(
             context = context,
@@ -584,9 +668,14 @@ fun MusicaRoot(
                         }
                     } else {
                         items(tracks.take(6), key = { "home-${it.id}" }) { track ->
+                            val cat = catalogMap[track.uri]
+                            val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
                             TrackRow(
                                 track = track,
-                                onClick = { playbackViewModel.playTrack(track, tracks) }
+                                onClick = { playbackViewModel.playTrack(track, tracks) },
+                                isLinked = isLinked,
+                                trackerColor = trackerCircleColor,
+                                onTrackerClick = { selectedTrackForLinks = track }
                             )
                         }
                     }
@@ -722,9 +811,14 @@ fun MusicaRoot(
                                 }
                             }
                             items(selectedFolderTracks, key = { "fld-trk-${it.id}" }) { track ->
+                                val cat = catalogMap[track.uri]
+                                val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
                                 TrackRow(
                                     track = track,
-                                    onClick = { playbackViewModel.playTrack(track, selectedFolderTracks) }
+                                    onClick = { playbackViewModel.playTrack(track, selectedFolderTracks) },
+                                    isLinked = isLinked,
+                                    trackerColor = trackerCircleColor,
+                                    onTrackerClick = { selectedTrackForLinks = track }
                                 )
                             }
                         }
@@ -951,9 +1045,14 @@ fun MusicaRoot(
                         }
                     } else {
                         items(filteredTracks, key = { "lib-${it.id}" }) { track ->
+                            val cat = catalogMap[track.uri]
+                            val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
                             TrackRow(
                                 track = track,
-                                onClick = { playbackViewModel.playTrack(track, filteredTracks) }
+                                onClick = { playbackViewModel.playTrack(track, filteredTracks) },
+                                isLinked = isLinked,
+                                trackerColor = trackerCircleColor,
+                                onTrackerClick = { selectedTrackForLinks = track }
                             )
                         }
                     }
@@ -1028,66 +1127,257 @@ fun MusicaRoot(
                             }
                         )
                     }
+                    // 1. Configuracion de Trackers y Descargas
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SectionTitle("Biblioteca", "Exporta nombres o crea una lista desde un archivo JSON.")
+                            SectionTitle("Trackers y Descargas", "Ajusta la intensidad, frecuencia y apariencia de vinculación y descargas.")
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = MusicaStyle.Shape.row,
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                ),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                                 border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
                             ) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    // Frecuencia de Tracker
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Frecuencia de Tracker", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                            Text(when(trackerFrequency) {
+                                                "ON_APP_OPEN" -> "Al abrir la app"
+                                                "EVERY_6_HOURS" -> "Cada 6 horas"
+                                                "DAILY" -> "Diario"
+                                                "MANUAL_ONLY" -> "Solo manual"
+                                                else -> "Al añadir canciones"
+                                            }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        var freqExpanded by remember { mutableStateOf(false) }
+                                        Box {
+                                            OutlinedButton(onClick = { freqExpanded = true }) { Text("Cambiar") }
+                                            DropdownMenu(expanded = freqExpanded, onDismissRequest = { freqExpanded = false }) {
+                                                listOf(
+                                                    "ON_NEW_TRACKS_ONLY" to "Al añadir canciones",
+                                                    "ON_APP_OPEN" to "Al abrir la app",
+                                                    "EVERY_6_HOURS" to "Cada 6 horas",
+                                                    "DAILY" to "Diario",
+                                                    "MANUAL_ONLY" to "Solo manual"
+                                                ).forEach { (key, label) ->
+                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                        freqExpanded = false
+                                                        coroutineScope.launch { container.preferences.saveTrackerFrequency(key) }
+                                                    })
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Intensidad de Tracker
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Intensidad de Tracker", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                            Text(when(trackerIntensity) {
+                                                "LOW" -> "Baja (ahorro batería/red)"
+                                                "HIGH" -> "Alta (rápida)"
+                                                else -> "Media (3 en lote)"
+                                            }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        var intExpanded by remember { mutableStateOf(false) }
+                                        Box {
+                                            OutlinedButton(onClick = { intExpanded = true }) { Text("Cambiar") }
+                                            DropdownMenu(expanded = intExpanded, onDismissRequest = { intExpanded = false }) {
+                                                listOf(
+                                                    "LOW" to "Baja (ahorro batería/red)",
+                                                    "MEDIUM" to "Media (3 en lote)",
+                                                    "HIGH" to "Alta (rápida)"
+                                                ).forEach { (key, label) ->
+                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                        intExpanded = false
+                                                        coroutineScope.launch { container.preferences.saveTrackerIntensity(key) }
+                                                    })
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Color del circulo del Tracker
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text("Color del círculo del Tracker", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            listOf(
+                                                "#FFFFFF" to Color.White,
+                                                "#00E5FF" to Color(0xFF00E5FF),
+                                                "#00E676" to Color(0xFF00E676),
+                                                "#FFEA00" to Color(0xFFFFEA00),
+                                                "#E040FB" to Color(0xFFE040FB)
+                                            ).forEach { (hex, col) ->
+                                                val isSelected = trackerCircleColorHex.equals(hex, ignoreCase = true)
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(32.dp)
+                                                        .clip(CircleShape)
+                                                        .background(col)
+                                                        .border(
+                                                            width = if (isSelected) 3.dp else 1.dp,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f),
+                                                            shape = CircleShape
+                                                        )
+                                                        .clickable {
+                                                            coroutineScope.launch { container.preferences.saveTrackerCircleColor(hex) }
+                                                        }
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Concurrencia de descargas
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Descargas simultáneas: $downloadConcurrency", style = MaterialTheme.typography.bodyMedium)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            listOf(1, 2, 3).forEach { c ->
+                                                val sel = downloadConcurrency == c
+                                                Button(
+                                                    onClick = { coroutineScope.launch { container.preferences.saveDownloadConcurrency(c) } },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                                        contentColor = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                    ),
+                                                    modifier = Modifier.size(38.dp),
+                                                    contentPadding = PaddingValues(0.dp)
+                                                ) {
+                                                    Text("$c", fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Copia de Seguridad Centralizada
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SectionTitle("Copia de Seguridad Centralizada", "Exporta, restaura o sube a la nube todo el estado de la app.")
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MusicaStyle.Shape.row,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     OutlinedButton(
-                                        onClick = { exportTrackNames.launch("canciones.txt") },
+                                        onClick = { exportCentralBackup.launch("musica-para-los-oidos-backup.json") },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text("Exportar nombres de canciones (.txt)")
+                                        Text("Exportar copia completa (.json)")
                                     }
+
                                     OutlinedButton(
-                                        onClick = { importPlaylistJson.launch(arrayOf("application/json", "text/*")) },
+                                        onClick = { importCentralBackup.launch(arrayOf("application/json", "text/*")) },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text("Importar lista desde JSON")
+                                        Text("Restaurar copia completa (.json)")
                                     }
-                                    OutlinedButton(
+
+                                    Button(
                                         onClick = {
                                             coroutineScope.launch {
-                                                runCatching { container.autoBackup.exportNow() }
-                                                    .onSuccess {
-                                                        playlistMessage = "Copia guardada en Descargas/MusicaParaLosOidos."
-                                                    }
-                                                    .onFailure {
-                                                        playlistMessage = "No se pudo guardar la copia: ${it.localizedMessage ?: "error desconocido"}"
-                                                    }
+                                                runCatching {
+                                                    val cacheFile = File(context.cacheDir, "musica-para-los-oidos-backup.json")
+                                                    val jsonStr = container.centralBackupManager.exportBundle()
+                                                    cacheFile.writeText(jsonStr, Charsets.UTF_8)
+                                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                                        context,
+                                                        "${context.packageName}.fileprovider",
+                                                        cacheFile
+                                                    )
+                                                    val driveIntent = container.centralBackupManager.createGoogleDriveIntent(uri)
+                                                    context.startActivity(driveIntent)
+                                                }.onFailure {
+                                                    playlistMessage = "No se pudo abrir Drive: ${it.localizedMessage ?: "error"}"
+                                                }
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text("Exportar copia ahora")
+                                        Text("Subir copia a Google Drive (App a App)")
                                     }
-                                    OutlinedButton(
-                                        onClick = { restoreBackupFile.launch(arrayOf("application/json", "text/*")) },
+
+                                    // Intervalo de auto backup
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Respaldo periódico automático", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                            Text(when(autoBackupInterval) {
+                                                "HOURLY" -> "Cada 1 hora"
+                                                "SIX_HOURS" -> "Cada 6 horas"
+                                                "OFF" -> "Desactivado"
+                                                else -> "Diario (24h)"
+                                            }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        var autoExpanded by remember { mutableStateOf(false) }
+                                        Box {
+                                            OutlinedButton(onClick = { autoExpanded = true }) { Text("Cambiar") }
+                                            DropdownMenu(expanded = autoExpanded, onDismissRequest = { autoExpanded = false }) {
+                                                listOf(
+                                                    "DAILY" to "Diario (24h)",
+                                                    "SIX_HOURS" to "Cada 6 horas",
+                                                    "HOURLY" to "Cada 1 hora",
+                                                    "OFF" to "Desactivado"
+                                                ).forEach { (key, label) ->
+                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                        autoExpanded = false
+                                                        coroutineScope.launch { container.preferences.saveAutoBackupInterval(key) }
+                                                    })
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    playlistMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Estadisticas de Trackers
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SectionTitle("Estadísticas de Trackers", "Resumen de canciones y letras vinculadas.")
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MusicaStyle.Shape.row,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    val ytCount = catalogTracks.count { !it.youtubeUrl.isNullOrBlank() }
+                                    val lrcCount = catalogTracks.count { it.lrcSynced }
+
+                                    Text("Canciones en biblioteca: ${tracks.size}", style = MaterialTheme.typography.bodyMedium)
+                                    Text("Vinculadas a YouTube: $ytCount", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                                    Text("Con letra LRC sincronizada: $lrcCount", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+
+                                    if (trackerSyncProgress != null) {
+                                        val (cur, tot) = trackerSyncProgress!!
+                                        Text("Sincronizando: $cur / $tot...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                isTrackerSyncing = true
+                                                container.trackTrackerManager.runAutoTracking(tracks) { cur, tot ->
+                                                    trackerSyncProgress = cur to tot
+                                                }
+                                                isTrackerSyncing = false
+                                                trackerSyncProgress = null
+                                                playlistMessage = "Sincronización de Trackers finalizada."
+                                            }
+                                        },
+                                        enabled = !isTrackerSyncing && tracks.isNotEmpty(),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text("Restaurar copia desde archivo")
+                                        Text(if (isTrackerSyncing) "Sincronizando..." else "Sincronizar Trackers ahora")
                                     }
-                                    Text(
-                                        "Copia automática: Descargas/MusicaParaLosOidos/musica-para-los-oidos-backup.json",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        """Formato JSON: {"name":"Favoritas","songs":["Cancion 1","Cancion 2"]}""",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    playlistMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                                 }
                             }
                         }
@@ -1214,5 +1504,69 @@ fun MusicaRoot(
     }
 
     UpdateDialog(viewModel = updateViewModel)
+
+    // BottomSheet para ver / editar vinculos de la pista (YouTube & LRC Tracker)
+    @OptIn(ExperimentalMaterial3Api::class)
+    val linksSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    if (selectedTrackForLinks != null) {
+        val currentTrack = selectedTrackForLinks!!
+        val catalogEntry = catalogMap[currentTrack.uri]
+        TrackLinksBottomSheet(
+            track = currentTrack,
+            catalogEntry = catalogEntry,
+            sheetState = linksSheetState,
+            onDismiss = { selectedTrackForLinks = null },
+            onSave = { ytUrl, lrcPath, lrcSynced ->
+                coroutineScope.launch {
+                    container.saveTrackLinks(currentTrack, ytUrl, lrcPath, lrcSynced)
+                }
+            },
+            onAutoSearchYouTube = {
+                container.trackTrackerManager.searchYouTubeMatch(currentTrack)
+            },
+            onAutoSearchLrc = {
+                container.trackTrackerManager.searchLrcMatch(currentTrack)
+            },
+            onDownloadLrc = { lrcContent ->
+                container.trackTrackerManager.downloadAndSaveLrc(currentTrack, lrcContent) != null
+            },
+            onUnlink = {
+                coroutineScope.launch {
+                    container.saveTrackLinks(currentTrack, null, null, false)
+                }
+            }
+        )
+    }
+
+    // Dialogo para restaurar pistas faltantes del respaldo en este dispositivo
+    if (missingTracksFromBackup != null) {
+        val missing = missingTracksFromBackup!!
+        AlertDialog(
+            onDismissRequest = { missingTracksFromBackup = null },
+            title = { Text("Restaurar canciones del respaldo") },
+            text = {
+                Text(
+                    "Se encontraron ${missing.size} pistas vinculadas a YouTube que no existen en este dispositivo.\n" +
+                        "Deseas descargarlas a tu carpeta de musica?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        container.centralBackupManager.enqueueMissingTracks(missing)
+                        playlistMessage = "Se agregaron ${missing.size} pistas a la cola de descargas."
+                        missingTracksFromBackup = null
+                    }
+                ) {
+                    Text("Descargar todas (${missing.size})")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { missingTracksFromBackup = null }) {
+                    Text("Omitir")
+                }
+            }
+        )
+    }
     }
 }

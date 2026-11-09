@@ -42,7 +42,9 @@ class AppContainer(context: Context) {
         MusicDatabase.MIGRATION_1_2,
         MusicDatabase.MIGRATION_2_3,
         MusicDatabase.MIGRATION_3_4,
-        MusicDatabase.MIGRATION_4_5
+        MusicDatabase.MIGRATION_4_5,
+        MusicDatabase.MIGRATION_5_6,
+        MusicDatabase.MIGRATION_6_7
     ).build()
 
     val tracks = database.trackDao()
@@ -58,7 +60,7 @@ class AppContainer(context: Context) {
     private val okHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
     val downloadStorageManager by lazy { DownloadStorageManager(appContext) }
     val lyricsDownloadEngine by lazy { com.musica.paralosoidos.data.lyrics.LyricsDownloadEngine(okHttpClient) }
-    val audioDownloadEngine by lazy { com.musica.paralosoidos.data.download.AudioDownloadEngine(okHttpClient) }
+    val audioDownloadEngine by lazy { com.musica.paralosoidos.data.download.AudioDownloadEngine(appContext) }
     val downloadQueueManager by lazy {
         DownloadQueueManager(
             context = appContext,
@@ -66,13 +68,39 @@ class AppContainer(context: Context) {
             storageManager = downloadStorageManager,
             audioDownloadEngine = audioDownloadEngine,
             lyricsDownloadEngine = lyricsDownloadEngine,
+            downloadHistoryDao = downloadHistoryDao,
             onDownloadComplete = { _ ->
                 runCatching { refreshLocalAudio(force = true) }
             }
         )
     }
 
+    val trackTrackerManager by lazy {
+        com.musica.paralosoidos.data.tracker.TrackTrackerManager(
+            context = appContext,
+            catalogTrackDao = catalogTracks,
+            lyricsEngine = lyricsDownloadEngine,
+            storageManager = downloadStorageManager,
+            notificationManager = downloadNotificationManager,
+            preferences = preferences
+        )
+    }
+
+    val centralBackupManager by lazy {
+        com.musica.paralosoidos.data.backup.CentralBackupManager(
+            context = appContext,
+            trackDao = tracks,
+            catalogTrackDao = catalogTracks,
+            downloadHistoryDao = downloadHistoryDao,
+            downloadSettings = downloadSettings,
+            preferences = preferences,
+            audioOutputProfileSettings = audioOutputProfileSettings,
+            downloadQueueManager = downloadQueueManager
+        )
+    }
+
     private val appContext = context.applicationContext
+    val downloadHistoryDao = database.downloadHistoryDao()
     private val backupState = database.backupStateDao()
     private val resolver = appContext.contentResolver
     private val libraryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -80,6 +108,7 @@ class AppContainer(context: Context) {
     @Volatile private var lastLibraryRefreshAt = 0L
 
     init {
+        com.yausername.youtubedl_android.YoutubeDL.getInstance().init(appContext)
         autoBackup.start()
         appContext.contentResolver.registerContentObserver(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -385,6 +414,43 @@ class AppContainer(context: Context) {
                     put("artist", track.artist)
                     put("album", track.album)
                     put("youtubeUrl", cleanUrl.orEmpty())
+                    put("ytAttempted", true)
+                }.toString()
+            )
+            catalogTracks.upsert(newEntry)
+        }
+    }
+
+    suspend fun saveTrackLinks(track: TrackEntity, youtubeUrl: String?, lrcPath: String?, lrcSynced: Boolean) {
+        val cleanUrl = youtubeUrl?.trim()?.takeIf(String::isNotBlank)
+        val cleanLrc = lrcPath?.trim()?.takeIf(String::isNotBlank)
+        val existing = catalogTracks.observeAll().first().firstOrNull { it.localUri == track.uri }
+        if (existing != null) {
+            val updated = existing.copy(
+                youtubeUrl = cleanUrl,
+                lrcPath = cleanLrc,
+                lrcSynced = lrcSynced
+            )
+            catalogTracks.upsert(updated)
+        } else {
+            val newEntry = CatalogTrackEntity(
+                id = "local-${track.id}",
+                title = track.title,
+                artist = track.artist,
+                album = track.album,
+                durationMs = track.durationMs,
+                youtubeUrl = cleanUrl,
+                localUri = track.uri,
+                lrcPath = cleanLrc,
+                lrcSynced = lrcSynced,
+                metadataJson = buildJsonObject {
+                    put("id", track.id)
+                    put("title", track.title)
+                    put("artist", track.artist)
+                    put("album", track.album)
+                    put("youtubeUrl", cleanUrl.orEmpty())
+                    put("lrcPath", cleanLrc.orEmpty())
+                    put("lrcSynced", lrcSynced)
                     put("ytAttempted", true)
                 }.toString()
             )

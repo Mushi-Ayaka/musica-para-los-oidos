@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
 
 class DownloadQueueManager(
     private val context: Context,
@@ -28,6 +29,7 @@ class DownloadQueueManager(
     private val storageManager: DownloadStorageManager,
     private val audioDownloadEngine: AudioDownloadEngine,
     private val lyricsDownloadEngine: LyricsDownloadEngine,
+    private val downloadHistoryDao: DownloadHistoryDao,
     private val onDownloadComplete: suspend (file: File) -> Unit = {}
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -131,7 +133,7 @@ class DownloadQueueManager(
         val job = scope.launch {
             try {
                 notificationManager.showProgressNotification(task.id, task.title, 0, "")
-                val audioFile = audioDownloadEngine.download(
+                val downloadResult = audioDownloadEngine.download(
                     task = task,
                     storageManager = storageManager,
                     lyricsEngine = lyricsDownloadEngine,
@@ -140,10 +142,29 @@ class DownloadQueueManager(
                         notificationManager.showProgressNotification(task.id, task.title, progress, speed)
                     }
                 )
+                val audioFile = downloadResult.audioFile
                 MediaScannerHelper.scanAndAwait(context, audioFile)
                 onDownloadComplete(audioFile)
                 updateTask(task.id) { it.copy(status = DownloadTaskStatus.COMPLETED, progress = 100, speed = "") }
-                notificationManager.showCompletedNotification(task.id, task.title)
+                val completedNotice = if (task.syncLyrics) {
+                    if (downloadResult.hasLrc) "${task.title} (con letra)" else "${task.title} (sin letra)"
+                } else {
+                    task.title
+                }
+                notificationManager.showCompletedNotification(task.id, completedNotice)
+                scope.launch {
+                    downloadHistoryDao.insert(
+                        DownloadHistoryEntity(
+                            id = "${task.id}_completed",
+                            videoId = task.videoId,
+                            title = task.title,
+                            channel = task.channel,
+                            format = task.format.name,
+                            bitrate = task.bitrate,
+                            filePath = audioFile.absolutePath
+                        )
+                    )
+                }
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
                     updateTask(task.id) {

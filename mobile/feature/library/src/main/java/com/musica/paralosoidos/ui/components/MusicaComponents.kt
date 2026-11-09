@@ -1,4 +1,11 @@
 package com.musica.paralosoidos.ui.components
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -102,7 +109,10 @@ fun EmptyLibrary(
 @Composable
 fun TrackRow(
     track: TrackEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isLinked: Boolean = false,
+    trackerColor: Color = Color.White,
+    onTrackerClick: (() -> Unit)? = null
 ) {
     Row(
         Modifier
@@ -140,6 +150,30 @@ fun TrackRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
             )
+        }
+        if (onTrackerClick != null) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onTrackerClick),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLinked) {
+                    Box(
+                        modifier = Modifier
+                            .size(11.dp)
+                            .clip(CircleShape)
+                            .background(trackerColor)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(11.dp)
+                            .border(1.5.dp, trackerColor.copy(alpha = 0.6f), CircleShape)
+                    )
+                }
+            }
         }
     }
 }
@@ -417,22 +451,53 @@ fun PlaylistTrackRow(
                 maxLines = 1
             )
         }
+                val currentCanMoveUp = rememberUpdatedState(canMoveUp)
+        val currentCanMoveDown = rememberUpdatedState(canMoveDown)
+        val currentOnMoveUp = rememberUpdatedState(onMoveUp)
+        val currentOnMoveDown = rememberUpdatedState(onMoveDown)
+        val haptic = LocalHapticFeedback.current
+        var isDragging by remember { mutableStateOf(false) }
+
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (canMoveUp) {
-                IconButton(onClick = onMoveUp, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.ArrowUpward, contentDescription = "Subir pista", modifier = Modifier.size(16.dp))
-                }
-            }
-            if (canMoveDown) {
-                IconButton(onClick = onMoveDown, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.ArrowDownward, contentDescription = "Bajar pista", modifier = Modifier.size(16.dp))
-                }
-            }
             Icon(
                 Icons.Default.DragHandle,
-                contentDescription = "Reordenar pista",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.padding(horizontal = 4.dp).size(20.dp)
+                contentDescription = "Arrastrar para reordenar",
+                tint = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .size(24.dp)
+                    .pointerInput(track.id) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            isDragging = true
+                            var totalDragY = 0f
+                            val threshold = 36.dp.toPx()
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) {
+                                        break
+                                    }
+                                    val dragY = change.position.y - change.previousPosition.y
+                                    totalDragY += dragY
+                                    change.consume()
+                                    if (totalDragY <= -threshold && currentCanMoveUp.value) {
+                                        currentOnMoveUp.value()
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        totalDragY = 0f
+                                    } else if (totalDragY >= threshold && currentCanMoveDown.value) {
+                                        currentOnMoveDown.value()
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        totalDragY = 0f
+                                    }
+                                }
+                            } finally {
+                                isDragging = false
+                            }
+                        }
+                    }
             )
             Box {
                 IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
@@ -443,6 +508,30 @@ fun PlaylistTrackRow(
                     onDismissRequest = { menuExpanded = false },
                     modifier = Modifier.background(MusicaStyle.Colors.menuBackgroundAlt)
                 ) {
+                    if (canMoveUp) {
+                        DropdownMenuItem(
+                            text = { Text("Subir posición") },
+                            leadingIcon = {
+                                Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(18.dp))
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onMoveUp()
+                            }
+                        )
+                    }
+                    if (canMoveDown) {
+                        DropdownMenuItem(
+                            text = { Text("Bajar posición") },
+                            leadingIcon = {
+                                Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(18.dp))
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onMoveDown()
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("Quitar de la lista", color = MaterialTheme.colorScheme.error) },
                         leadingIcon = {
