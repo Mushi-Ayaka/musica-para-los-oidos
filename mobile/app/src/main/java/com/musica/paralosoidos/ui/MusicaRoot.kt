@@ -111,7 +111,10 @@ import com.musica.paralosoidos.ui.ThemeSettingsSection
 import com.musica.paralosoidos.ui.components.AddTracksToPlaylistDialog
 import com.musica.paralosoidos.ui.components.EmptyLibrary
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import com.musica.paralosoidos.ui.components.FolderRow
 import com.musica.paralosoidos.ui.components.PlaylistDetailHeader
 import com.musica.paralosoidos.ui.components.PlaylistGalleryCard
@@ -709,7 +712,12 @@ fun MusicaRoot(
                             listOf("Pistas", "Álbumes", "Listas", "Carpetas").forEach { section ->
                                 FilterChip(
                                     selected = librarySubTab == section,
-                                    onClick = { libraryViewModel.setLibrarySubTab(section) },
+                                    onClick = {
+                                        libraryViewModel.setLibrarySubTab(section)
+                                        if (section == "Carpetas") {
+                                            selectedFolderPath = null
+                                        }
+                                    },
                                     label = { Text(section) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -754,8 +762,33 @@ fun MusicaRoot(
 
                     if (librarySubTab == "Carpetas") {
                         if (selectedFolderPath == null) {
+                            item {
+                                Text(
+                                    "Fuentes y Carpetas de Audio",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
                             if (folderItems.isEmpty()) {
-                                item { Text("No hay carpetas de música disponibles.") }
+                                item {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Column(
+                                            Modifier.fillMaxWidth().padding(24.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text("No se detectaron fuentes de audio.", style = MaterialTheme.typography.bodyMedium)
+                                            Spacer(Modifier.height(8.dp))
+                                            Button(onClick = { coroutineScope.launch { libraryViewModel.refreshLibrary(force = true) } }) {
+                                                Text("Escanear almacenamiento")
+                                            }
+                                        }
+                                    }
+                                }
                             } else {
                                 items(folderItems, key = { "folder-${it.path}" }) { folder ->
                                     FolderRow(
@@ -777,6 +810,7 @@ fun MusicaRoot(
                                     border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
                                 ) {
                                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        var detailFolderMenuExpanded by remember { mutableStateOf(false) }
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             IconButton(onClick = { selectedFolderPath = null }) {
                                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
@@ -794,6 +828,39 @@ fun MusicaRoot(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = 1
                                                 )
+                                            }
+                                            Box {
+                                                IconButton(onClick = { detailFolderMenuExpanded = true }) {
+                                                    Icon(Icons.Default.MoreVert, contentDescription = "Opciones de carpeta", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                DropdownMenu(
+                                                    expanded = detailFolderMenuExpanded,
+                                                    onDismissRequest = { detailFolderMenuExpanded = false },
+                                                    modifier = Modifier.background(MusicaStyle.Colors.menuBackgroundAlt)
+                                                ) {
+                                                    val isHidden = currentFolder?.isHidden == true
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                if (isHidden) "Mostrar carpeta" else "Ocultar carpeta",
+                                                                color = if (isHidden) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                                            )
+                                                        },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                if (isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                                                contentDescription = null,
+                                                                tint = if (isHidden) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            detailFolderMenuExpanded = false
+                                                            if (currentFolder != null) {
+                                                                libraryViewModel.setFolderHidden(currentFolder.path, !isHidden)
+                                                            }
+                                                        }
+                                                    )
+                                                }
                                             }
                                         }
                                         Button(

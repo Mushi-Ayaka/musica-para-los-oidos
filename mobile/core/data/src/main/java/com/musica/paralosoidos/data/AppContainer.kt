@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.database.ContentObserver
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -115,6 +116,7 @@ class AppContainer(context: Context) {
             }.onFailure {
                 android.util.Log.e("AppContainer", "Fallo inicializacion de YoutubeDL/FFmpeg", it)
             }
+            runCatching { refreshLocalAudio(force = true) }
         }
         autoBackup.start()
         appContext.contentResolver.registerContentObserver(
@@ -169,16 +171,31 @@ class AppContainer(context: Context) {
 
     private fun queryLocalAudio(): List<TrackEntity> {
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media.DATA
-        )
+        val hasRelPath = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        val projection = if (hasRelPath) {
+            arrayOf(
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.ALBUM_ID,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.DISPLAY_NAME,
+                MediaStore.Audio.Media.DATA,
+                MediaStore.Audio.Media.RELATIVE_PATH
+            )
+        } else {
+            arrayOf(
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.ALBUM_ID,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.DISPLAY_NAME,
+                MediaStore.Audio.Media.DATA
+            )
+        }
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val found = mutableListOf<TrackEntity>()
 
@@ -225,17 +242,25 @@ class AppContainer(context: Context) {
 
                     },
 
-                    folderPath = run {
-
+                                        folderPath = run {
+                        val relColumn = if (hasRelPath) cursor.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
                         val rawPath = if (dataColumn >= 0) cursor.getString(dataColumn) else null
-
-                        if (!rawPath.isNullOrBlank()) java.io.File(rawPath).parent.orEmpty() else "Almacenamiento interno"
-
+                        val relPath = if (relColumn >= 0) cursor.getString(relColumn) else null
+                        when {
+                            !relPath.isNullOrBlank() -> relPath.trim().trimEnd('/')
+                            !rawPath.isNullOrBlank() -> java.io.File(rawPath).parent.orEmpty()
+                            else -> "Almacenamiento interno"
+                        }
                     },
-
                     folderName = run {
+                        val relColumn = if (hasRelPath) cursor.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
                         val rawPath = if (dataColumn >= 0) cursor.getString(dataColumn) else null
-                        if (!rawPath.isNullOrBlank()) java.io.File(rawPath).parentFile?.name.orEmpty().ifBlank { "Musica" } else "Musica"
+                        val relPath = if (relColumn >= 0) cursor.getString(relColumn) else null
+                        when {
+                            !relPath.isNullOrBlank() -> relPath.trim().trimEnd('/').substringAfterLast('/').ifBlank { "Música" }
+                            !rawPath.isNullOrBlank() -> java.io.File(rawPath).parentFile?.name.orEmpty().ifBlank { "Música" }
+                            else -> "Música"
+                        }
                     }
                 )
             }
