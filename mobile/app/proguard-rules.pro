@@ -25,3 +25,8 @@
 
 # Coil
 -dontwarn coil.**
+
+# youtubedl-android and FFmpeg JNI / Native
+-keep class com.yausername.** { *; }
+-keepclassmembers class com.yausername.** { *; }
+-dontwarn com.yausername.**

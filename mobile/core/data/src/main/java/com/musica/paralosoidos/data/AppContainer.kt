@@ -45,7 +45,7 @@ class AppContainer(context: Context) {
         MusicDatabase.MIGRATION_4_5,
         MusicDatabase.MIGRATION_5_6,
         MusicDatabase.MIGRATION_6_7
-    ).build()
+    ).fallbackToDestructiveMigration().build()
 
     val tracks = database.trackDao()
     val catalogTracks = database.catalogTrackDao()
@@ -108,7 +108,14 @@ class AppContainer(context: Context) {
     @Volatile private var lastLibraryRefreshAt = 0L
 
     init {
-        com.yausername.youtubedl_android.YoutubeDL.getInstance().init(appContext)
+        libraryScope.launch(Dispatchers.IO) {
+            runCatching {
+                com.yausername.youtubedl_android.YoutubeDL.getInstance().init(appContext)
+                com.yausername.ffmpeg.FFmpeg.getInstance().init(appContext)
+            }.onFailure {
+                android.util.Log.e("AppContainer", "Fallo inicializacion de YoutubeDL/FFmpeg", it)
+            }
+        }
         autoBackup.start()
         appContext.contentResolver.registerContentObserver(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
