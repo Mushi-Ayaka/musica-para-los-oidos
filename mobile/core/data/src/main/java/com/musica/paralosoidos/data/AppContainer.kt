@@ -111,8 +111,8 @@ class AppContainer(context: Context) {
     init {
         libraryScope.launch(Dispatchers.IO) {
             runCatching {
-                com.yausername.youtubedl_android.YoutubeDL.getInstance().init(appContext)
                 com.yausername.ffmpeg.FFmpeg.getInstance().init(appContext)
+                com.yausername.youtubedl_android.YoutubeDL.getInstance().init(appContext)
             }.onFailure {
                 android.util.Log.e("AppContainer", "Fallo inicializacion de YoutubeDL/FFmpeg", it)
             }

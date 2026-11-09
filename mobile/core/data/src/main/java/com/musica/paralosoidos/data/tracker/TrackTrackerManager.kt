@@ -38,7 +38,19 @@ class TrackTrackerManager(
         val query = "${clean.artist} ${clean.title}".trim()
         if (query.isBlank()) return@withContext null
 
+        // 1. Scraping HTTP instantaneo (sin esperar Python)
+        val scraped = com.musica.paralosoidos.data.download.YouTubeSearchScraper.search(query, maxResults = 1)
+        val topId = scraped.firstOrNull()?.id
+        if (!topId.isNullOrBlank()) {
+            return@withContext "https://www.youtube.com/watch?v=$topId"
+        }
+
+        // 2. Respaldo mediante yt-dlp local
         try {
+            runCatching {
+                com.yausername.ffmpeg.FFmpeg.getInstance().init(context.applicationContext)
+                YoutubeDL.getInstance().init(context.applicationContext)
+            }
             val request = YoutubeDLRequest("ytsearch1:$query").apply {
                 addOption("--dump-json")
                 addOption("--no-playlist")
@@ -51,7 +63,8 @@ class TrackTrackerManager(
             if (videoId.isNotBlank()) {
                 "https://www.youtube.com/watch?v=$videoId"
             } else null
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("TrackTrackerManager", "Error buscando YT match para ${track.title}", e)
             null
         }
     }

@@ -120,9 +120,14 @@ class DownloaderViewModel(
                         )
                     )
                 } else {
-                    // Real search via yt-dlp
-                    val searchResults = performYoutubeSearch(trimmed)
-                    searchResults
+                    // 1. Scraper HTTP instantaneo (sin esperar Python ni yt-dlp)
+                    val scraped = com.musica.paralosoidos.data.download.YouTubeSearchScraper.search(trimmed, maxResults = 8)
+                    if (scraped.isNotEmpty()) {
+                        scraped
+                    } else {
+                        // 2. Respaldo mediante yt-dlp local
+                        performYoutubeSearch(trimmed)
+                    }
                 }
                 _searchResults.value = results
             } catch (e: Exception) {
@@ -135,7 +140,8 @@ class DownloaderViewModel(
                     _isServiceBlocked.value = true
                     _serviceNoticeMessage.value = "Servicio de descargas temporalmente no disponible por cambios en YouTube. Se actualizara automaticamente."
                 } else {
-                    _userFeedbackMessage.value = "No se pudieron obtener resultados de YouTube."
+                    val msg = e.localizedMessage ?: e.message ?: "No se pudieron obtener resultados de YouTube."
+                    _userFeedbackMessage.value = "Error en busqueda: $msg"
                 }
             } finally {
                 _isSearching.value = false
@@ -145,6 +151,9 @@ class DownloaderViewModel(
 
     private suspend fun performYoutubeSearch(query: String): List<DownloadSearchResult> =
         withContext(Dispatchers.IO) {
+            runCatching {
+                YoutubeDL.getInstance().init(context.applicationContext)
+            }
             val request = YoutubeDLRequest("ytsearch5:$query").apply {
                 addOption("--dump-json")
                 addOption("--flat-playlist")
