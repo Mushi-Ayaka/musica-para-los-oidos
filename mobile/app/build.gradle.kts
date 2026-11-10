@@ -17,8 +17,8 @@ android {
         applicationId = "com.musica.paralosoidos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.4.2"
+        versionCode = 16
+        versionName = "1.4.3"
 
         manifestPlaceholders["appLabel"] = "@string/app_name"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -55,7 +55,7 @@ android {
         }
         release {
             isMinifyEnabled = true
-            isShrinkResources = true
+            isShrinkResources = false
             signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

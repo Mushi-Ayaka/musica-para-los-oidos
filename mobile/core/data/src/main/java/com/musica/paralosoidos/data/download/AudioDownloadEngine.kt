@@ -50,19 +50,26 @@ class AudioDownloadEngine(private val context: Context) {
 
         // Tarea A (async): Descarga del flujo de audio mediante yt-dlp
         val audioDeferred = async(Dispatchers.IO) {
+            var lastError: Throwable? = null
             var ytReady = false
             for (attempt in 1..25) {
-                ytReady = runCatching {
+                val res = runCatching {
                     com.yausername.ffmpeg.FFmpeg.getInstance().init(context.applicationContext)
                     com.yausername.youtubedl_android.YoutubeDL.getInstance().init(context.applicationContext)
                     true
-                }.getOrDefault(false)
-                if (ytReady) break
-                onProgress(0, "Preparando motor...")
+                }
+                if (res.isSuccess) {
+                    ytReady = true
+                    break
+                } else {
+                    lastError = res.exceptionOrNull()
+                    android.util.Log.e("AudioDownloadEngine", "Intento $attempt fallo init: ${lastError?.message}", lastError)
+                }
+                onProgress(0, "Preparando motor ($attempt)...")
                 kotlinx.coroutines.delay(1000)
             }
             if (!ytReady) {
-                throw IllegalStateException("El motor de descarga no pudo inicializarse a tiempo. Por favor reintenta.")
+                throw IllegalStateException("Fallo al inicializar motor: ${lastError?.localizedMessage ?: "timeout"}")
             }
 
             val outputTemplate = outputFile.absolutePath

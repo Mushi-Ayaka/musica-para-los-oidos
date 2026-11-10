@@ -30,3 +30,6 @@
 -keep class com.yausername.** { *; }
 -keepclassmembers class com.yausername.** { *; }
 -dontwarn com.yausername.**
+
+# youtubedl-android resources and R class
+-keep class com.yausername.youtubedl_android.R$* { *; }
