@@ -142,9 +142,11 @@ class DownloadQueueManager(
                         notificationManager.showProgressNotification(task.id, task.title, progress, speed)
                     }
                 )
-                val audioFile = downloadResult.audioFile
-                MediaScannerHelper.scanAndAwait(context, audioFile)
-                onDownloadComplete(audioFile)
+                val audioFile = downloadResult.mediaScanFile
+                if (audioFile != null) {
+                    MediaScannerHelper.scanAndAwait(context, audioFile)
+                    onDownloadComplete(audioFile)
+                }
                 updateTask(task.id) { it.copy(status = DownloadTaskStatus.COMPLETED, progress = 100, speed = "") }
                 val completedNotice = if (task.syncLyrics) {
                     if (downloadResult.hasLrc) "${task.title} (con letra)" else "${task.title} (sin letra)"
@@ -161,7 +163,7 @@ class DownloadQueueManager(
                             channel = task.channel,
                             format = task.format.name,
                             bitrate = task.bitrate,
-                            filePath = audioFile.absolutePath
+                            filePath = downloadResult.audioUri
                         )
                     )
                 }

@@ -1,6 +1,7 @@
 package com.musica.paralosoidos.data.download
 
 import com.musica.paralosoidos.data.DownloadSearchResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -12,8 +13,9 @@ import java.util.regex.Pattern
 
 object YouTubeSearchScraper {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .callTimeout(7, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -35,9 +37,11 @@ object YouTubeSearchScraper {
                 .build()
 
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) return@withContext emptyList()
-
-            val html = response.body?.string() ?: return@withContext emptyList()
+            if (!response.isSuccessful) {
+                response.close()
+                return@withContext emptyList()
+            }
+            val html = response.use { it.body?.string() } ?: return@withContext emptyList()
             val matcher = YT_INITIAL_DATA_PATTERN.matcher(html)
             val jsonString = if (matcher.find()) {
                 matcher.group(1) ?: matcher.group(2)
@@ -83,6 +87,8 @@ object YouTubeSearchScraper {
                 if (results.size >= maxResults) break
             }
             results
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             android.util.Log.w("YouTubeSearchScraper", "Error en scraping web: ${e.message}")
             emptyList()

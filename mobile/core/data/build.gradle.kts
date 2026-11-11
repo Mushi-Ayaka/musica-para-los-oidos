@@ -32,6 +32,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     api(libs.kotlinx.serialization.json)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.documentfile)
     implementation(libs.okhttp)
     api(libs.youtubedl.android.lib)
     implementation(libs.youtubedl.android.ffmpeg)

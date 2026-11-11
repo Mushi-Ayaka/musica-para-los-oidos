@@ -15,11 +15,15 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 data class AudioDownloadResult(
-    val audioFile: File,
+    val audioUri: String,
+    val mediaScanFile: File?,
     val hasLrc: Boolean
 )
 
-class AudioDownloadEngine(private val context: Context) {
+class AudioDownloadEngine(
+    private val context: Context,
+    private val youtubeDLRuntime: YoutubeDLRuntime
+) {
 
     suspend fun download(
         task: DownloadTask,
@@ -50,27 +54,8 @@ class AudioDownloadEngine(private val context: Context) {
 
         // Tarea A (async): Descarga del flujo de audio mediante yt-dlp
         val audioDeferred = async(Dispatchers.IO) {
-            var lastError: Throwable? = null
-            var ytReady = false
-            for (attempt in 1..25) {
-                val res = runCatching {
-                    com.yausername.ffmpeg.FFmpeg.getInstance().init(context.applicationContext)
-                    com.yausername.youtubedl_android.YoutubeDL.getInstance().init(context.applicationContext)
-                    true
-                }
-                if (res.isSuccess) {
-                    ytReady = true
-                    break
-                } else {
-                    lastError = res.exceptionOrNull()
-                    android.util.Log.e("AudioDownloadEngine", "Intento $attempt fallo init: ${lastError?.message}", lastError)
-                }
-                onProgress(0, "Preparando motor ($attempt)...")
-                kotlinx.coroutines.delay(1000)
-            }
-            if (!ytReady) {
-                throw IllegalStateException("Fallo al inicializar motor: ${lastError?.localizedMessage ?: "timeout"}")
-            }
+            onProgress(0, "Verificando y actualizando yt-dlp...")
+            youtubeDLRuntime.ensureReady()
 
             val outputTemplate = outputFile.absolutePath
                 .let { path ->
@@ -105,11 +90,11 @@ class AudioDownloadEngine(private val context: Context) {
                 File(outputFile.parent, outputFile.nameWithoutExtension + ".$ext")
             }.firstOrNull { it.exists() && it.length() > 0 } ?: outputFile
 
-            actualFile
+            storageManager.publishAudioFile(actualFile)
         }
 
         // Esperar la descarga del audio
-        val completedAudioFile = audioDeferred.await()
+        val publishedAudio = audioDeferred.await()
         onProgress(100, "")
 
         // Esperar la tarea de letra sin bloquear
@@ -122,7 +107,8 @@ class AudioDownloadEngine(private val context: Context) {
         }
 
         AudioDownloadResult(
-            audioFile = completedAudioFile,
+            audioUri = publishedAudio.uri.toString(),
+            mediaScanFile = publishedAudio.mediaScanFile,
             hasLrc = lrcSaved
         )
     }

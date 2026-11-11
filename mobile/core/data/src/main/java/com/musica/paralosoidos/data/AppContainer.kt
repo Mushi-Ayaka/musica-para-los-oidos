@@ -55,13 +55,16 @@ class AppContainer(context: Context) {
     val audioOutputProfileSettings = AudioOutputProfileSettings(context)
     val preferences = AppPreferences(context)
     val autoBackup = AutoBackupManager(context, preferences, tracks)
+    val youtubeDLRuntime by lazy { com.musica.paralosoidos.data.download.YoutubeDLRuntime(appContext) }
     val updateRepository by lazy { com.musica.paralosoidos.data.update.UpdateRepository(appContext, preferences) }
     val networkMonitor: NetworkMonitor by lazy { ConnectivityNetworkMonitor(appContext) }
     val downloadNotificationManager by lazy { DownloadNotificationManager(appContext) }
     private val okHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
-    val downloadStorageManager by lazy { DownloadStorageManager(appContext) }
+    val downloadStorageManager by lazy { DownloadStorageManager(appContext, downloadSettings) }
     val lyricsDownloadEngine by lazy { com.musica.paralosoidos.data.lyrics.LyricsDownloadEngine(okHttpClient) }
-    val audioDownloadEngine by lazy { com.musica.paralosoidos.data.download.AudioDownloadEngine(appContext) }
+    val audioDownloadEngine by lazy {
+        com.musica.paralosoidos.data.download.AudioDownloadEngine(appContext, youtubeDLRuntime)
+    }
     val downloadQueueManager by lazy {
         DownloadQueueManager(
             context = appContext,
@@ -83,7 +86,8 @@ class AppContainer(context: Context) {
             lyricsEngine = lyricsDownloadEngine,
             storageManager = downloadStorageManager,
             notificationManager = downloadNotificationManager,
-            preferences = preferences
+            preferences = preferences,
+            youtubeDLRuntime = youtubeDLRuntime
         )
     }
 
@@ -110,11 +114,12 @@ class AppContainer(context: Context) {
 
     init {
         libraryScope.launch(Dispatchers.IO) {
-            runCatching {
-                com.yausername.ffmpeg.FFmpeg.getInstance().init(appContext)
-                com.yausername.youtubedl_android.YoutubeDL.getInstance().init(appContext)
-            }.onFailure {
-                android.util.Log.e("AppContainer", "Fallo inicializacion de YoutubeDL/FFmpeg", it)
+            try {
+                youtubeDLRuntime.ensureReady()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                android.util.Log.e("AppContainer", "Fallo preparando yt-dlp", error)
             }
             runCatching { refreshLocalAudio(force = true) }
         }

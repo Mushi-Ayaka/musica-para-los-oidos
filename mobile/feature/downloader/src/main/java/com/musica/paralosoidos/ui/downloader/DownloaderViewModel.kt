@@ -13,6 +13,9 @@ import com.musica.paralosoidos.data.DownloadSettings
 import com.musica.paralosoidos.data.DownloadSettingsState
 import com.musica.paralosoidos.data.DownloadTask
 import com.musica.paralosoidos.data.DownloadTaskStatus
+import com.musica.paralosoidos.data.download.YoutubeDLRuntime
+import com.musica.paralosoidos.data.download.YoutubeDLState
+import android.net.Uri
 import com.musica.paralosoidos.data.NetworkMonitor
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -33,7 +36,8 @@ class DownloaderViewModel(
     private val downloadSettings: DownloadSettings,
     private val networkMonitor: NetworkMonitor,
     private val downloadQueueManager: DownloadQueueManager,
-    private val downloadHistoryDao: DownloadHistoryDao
+    private val downloadHistoryDao: DownloadHistoryDao,
+    private val youtubeDLRuntime: YoutubeDLRuntime
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -56,6 +60,7 @@ class DownloaderViewModel(
 
     private val _serviceNoticeMessage = MutableStateFlow<String?>(null)
     val serviceNoticeMessage: StateFlow<String?> = _serviceNoticeMessage.asStateFlow()
+    val youtubeDLState: StateFlow<YoutubeDLState> = youtubeDLRuntime.state
 
     private val _userFeedbackMessage = MutableStateFlow<String?>(null)
     val userFeedbackMessage: StateFlow<String?> = _userFeedbackMessage.asStateFlow()
@@ -124,12 +129,23 @@ class DownloaderViewModel(
                     val scraped = com.musica.paralosoidos.data.download.YouTubeSearchScraper.search(trimmed, maxResults = 8)
                     if (scraped.isNotEmpty()) {
                         scraped
+                    } else if (youtubeDLRuntime.state.value != YoutubeDLState.Ready) {
+                        _userFeedbackMessage.value = when (val state = youtubeDLRuntime.state.value) {
+                            YoutubeDLState.Preparing,
+                            YoutubeDLState.Updating ->
+                                "yt-dlp todavía se está preparando. La búsqueda web no devolvió resultados."
+                            YoutubeDLState.Ready -> null
+                            is YoutubeDLState.Failed ->
+                                "yt-dlp no está disponible; no se pudo completar la búsqueda de respaldo."
+                        }
+                        emptyList()
                     } else {
-                        // 2. Respaldo mediante yt-dlp local
                         performYoutubeSearch(trimmed)
                     }
                 }
                 _searchResults.value = results
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 // Autoprotection circuit-breaker
                 val errorMsg = e.message.orEmpty()
@@ -151,13 +167,13 @@ class DownloaderViewModel(
 
     private suspend fun performYoutubeSearch(query: String): List<DownloadSearchResult> =
         withContext(Dispatchers.IO) {
-            runCatching {
-                YoutubeDL.getInstance().init(context.applicationContext)
-            }
+            youtubeDLRuntime.ensureReady()
             val request = YoutubeDLRequest("ytsearch5:$query").apply {
                 addOption("--dump-json")
                 addOption("--flat-playlist")
                 addOption("--no-playlist")
+                addOption("--socket-timeout", "6")
+                addOption("--retries", "1")
             }
             val response = YoutubeDL.getInstance().execute(request)
             val output = response.out.trim()
@@ -204,6 +220,21 @@ class DownloaderViewModel(
         }
     }
 
+    fun saveDownloadFolder(uri: Uri) {
+        viewModelScope.launch {
+            runCatching { downloadSettings.saveOutputFolderUri(uri.toString()) }
+                .onSuccess { _userFeedbackMessage.value = "Carpeta de descargas guardada." }
+                .onFailure { error ->
+                    _userFeedbackMessage.value =
+                        "No se pudo guardar la carpeta: ${error.localizedMessage ?: "error desconocido"}"
+                }
+        }
+    }
+
+    fun showMessage(message: String) {
+        _userFeedbackMessage.value = message
+    }
+
     fun downloadTrack(
         result: DownloadSearchResult,
         format: AudioOutputFormat,
@@ -211,6 +242,14 @@ class DownloaderViewModel(
     ) {
         if (!isOnline.value) {
             _userFeedbackMessage.value = "Sin conexion a Internet. No se puede iniciar la descarga."
+            return
+        }
+        if (settings.value.outputFolderUri.isNullOrBlank()) {
+            _userFeedbackMessage.value = "Elige primero la carpeta donde se guardarán las descargas."
+            return
+        }
+        if (youtubeDLRuntime.state.value != YoutubeDLState.Ready) {
+            _userFeedbackMessage.value = "La descarga está deshabilitada hasta que yt-dlp termine de actualizarse."
             return
         }
 
@@ -256,9 +295,14 @@ class DownloaderViewModel(
     fun retryService() {
         _isServiceBlocked.value = false
         _serviceNoticeMessage.value = null
-        val current = _query.value.trim()
-        if (current.isNotBlank()) {
-            search(current)
+        viewModelScope.launch {
+            runCatching { youtubeDLRuntime.ensureReady() }
+                .onFailure { error ->
+                    _userFeedbackMessage.value =
+                        "No se pudo actualizar yt-dlp: ${error.localizedMessage ?: "error desconocido"}"
+                }
+            val current = _query.value.trim()
+            if (current.isNotBlank()) search(current)
         }
     }
 
@@ -280,11 +324,19 @@ class DownloaderViewModel(
         private val downloadSettings: DownloadSettings,
         private val networkMonitor: NetworkMonitor,
         private val downloadQueueManager: DownloadQueueManager,
-        private val downloadHistoryDao: DownloadHistoryDao
+        private val downloadHistoryDao: DownloadHistoryDao,
+        private val youtubeDLRuntime: YoutubeDLRuntime
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DownloaderViewModel(context, downloadSettings, networkMonitor, downloadQueueManager, downloadHistoryDao) as T
+            return DownloaderViewModel(
+                context,
+                downloadSettings,
+                networkMonitor,
+                downloadQueueManager,
+                downloadHistoryDao,
+                youtubeDLRuntime
+            ) as T
         }
     }
 }

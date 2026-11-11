@@ -1,5 +1,9 @@
 package com.musica.paralosoidos.ui.downloader
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +60,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.musica.paralosoidos.data.DownloadHistoryEntity
+import com.musica.paralosoidos.data.download.YoutubeDLState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +73,7 @@ fun DownloaderScreen(
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val isServiceBlocked by viewModel.isServiceBlocked.collectAsStateWithLifecycle()
+    val youtubeDLState by viewModel.youtubeDLState.collectAsStateWithLifecycle()
     val serviceNoticeMessage by viewModel.serviceNoticeMessage.collectAsStateWithLifecycle()
     val userFeedbackMessage by viewModel.userFeedbackMessage.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -76,8 +82,29 @@ fun DownloaderScreen(
     val isQueueSheetOpen by viewModel.isQueueSheetOpen.collectAsStateWithLifecycle()
     val downloadHistory by viewModel.downloadHistory.collectAsStateWithLifecycle()
 
-    val canPerformActions = isOnline && !isServiceBlocked
+    val canSearch = isOnline && !isServiceBlocked
+    val canDownload = canSearch &&
+        youtubeDLState == YoutubeDLState.Ready &&
+        !settings.outputFolderUri.isNullOrBlank()
     val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
+    val downloadFolderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                viewModel.saveDownloadFolder(uri)
+            } catch (error: SecurityException) {
+                viewModel.showMessage(
+                    "Android no concedió acceso a la carpeta: ${error.localizedMessage ?: "permiso denegado"}"
+                )
+            }
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -162,6 +189,61 @@ fun DownloaderScreen(
             }
         }
 
+        if (youtubeDLState != YoutubeDLState.Ready) {
+            val updateMessage = when (val state = youtubeDLState) {
+                YoutubeDLState.Preparing -> "Preparando yt-dlp..."
+                YoutubeDLState.Updating -> "Actualizando yt-dlp. Las descargas están deshabilitadas hasta que termine."
+                YoutubeDLState.Ready -> ""
+                is YoutubeDLState.Failed -> "No se pudo actualizar yt-dlp: ${state.message}"
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = updateMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (youtubeDLState is YoutubeDLState.Failed) {
+                        OutlinedButton(
+                            onClick = viewModel::retryService,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Reintentar", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        val selectedFolderLabel = settings.outputFolderUri?.let { rawUri ->
+            Uri.parse(rawUri).lastPathSegment.orEmpty()
+                .substringAfter(':')
+                .substringAfterLast('/')
+        }
+        OutlinedButton(
+            onClick = { downloadFolderPicker.launch(null) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                selectedFolderLabel?.let { "Carpeta de descarga: $it (cambiar)" }
+                    ?: "Elegir carpeta para guardar descargas"
+            )
+        }
+
         // Service Blocked (YouTube Bot Detection / OTA update) Banner
         if (isServiceBlocked) {
             Card(
@@ -243,7 +325,7 @@ fun DownloaderScreen(
             onQueryChange = viewModel::onQueryChanged,
             onSearch = viewModel::search,
             isSearching = isSearching,
-            enabled = canPerformActions
+            enabled = canSearch
         )
 
         // Quick Config Bar
@@ -251,7 +333,7 @@ fun DownloaderScreen(
             settings = settings,
             onSelectQuality = viewModel::updateQuality,
             onToggleSyncLyrics = viewModel::toggleSyncLyrics,
-            enabled = canPerformActions
+            enabled = canSearch
         )
 
         // Results or Empty State
@@ -276,7 +358,7 @@ fun DownloaderScreen(
                     result = result,
                     activeSettings = settings,
                     onDownload = viewModel::downloadTrack,
-                    enabled = canPerformActions
+                    enabled = canDownload
                 )
             }
         } else if (!isSearching) {
@@ -377,10 +459,13 @@ private fun DownloadHistoryItem(
 ) {
     val context = LocalContext.current
     val lrcFile = remember(item.filePath) {
-        val mp3 = File(item.filePath)
-        File(mp3.parent ?: "", mp3.nameWithoutExtension + ".lrc")
+        val uri = Uri.parse(item.filePath)
+        if (uri.scheme == "file" || uri.scheme == null) {
+            val mp3 = File(item.filePath)
+            File(mp3.parent ?: "", mp3.nameWithoutExtension + ".lrc")
+        } else null
     }
-    val hasLrc = remember(lrcFile) { lrcFile.exists() }
+    val hasLrc = remember(lrcFile) { lrcFile?.exists() == true }
     val dateStr = remember(item.downloadedAt) {
         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(item.downloadedAt))
     }

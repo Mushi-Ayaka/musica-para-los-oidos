@@ -16,7 +16,8 @@ const val PUBLIC_MUSIC_FOLDER = "Music/Musica para los Oídos"
 data class DownloadSettingsState(
     val format: AudioOutputFormat? = null,
     val mp3Bitrate: Int? = null,
-    val syncLyrics: Boolean = true
+    val syncLyrics: Boolean = true,
+    val outputFolderUri: String? = null
 ) {
     val isConfigured: Boolean
         get() = format == AudioOutputFormat.BEST ||
@@ -36,7 +37,8 @@ class DownloadSettings(context: Context) {
                 it.key == preferences[FORMAT_KEY]
             },
             mp3Bitrate = preferences[MP3_BITRATE_KEY],
-            syncLyrics = preferences[SYNC_LYRICS_KEY] ?: true
+            syncLyrics = preferences[SYNC_LYRICS_KEY] ?: true,
+            outputFolderUri = preferences[OUTPUT_FOLDER_URI_KEY]
         )
     }
 
@@ -67,6 +69,13 @@ class DownloadSettings(context: Context) {
         }
     }
 
+    suspend fun saveOutputFolderUri(uri: String) {
+        require(uri.isNotBlank()) { "La ubicación de descarga no puede estar vacía." }
+        dataStore.edit { preferences ->
+            preferences[OUTPUT_FOLDER_URI_KEY] = uri
+        }
+    }
+
     suspend fun restore(formatKey: String?, mp3Bitrate: Int?, syncLyrics: Boolean? = true) {
         val format = AudioOutputFormat.entries.firstOrNull { it.key == formatKey }
         val bitrate = mp3Bitrate?.takeIf { it in DownloadSettingsState.MP3_BITRATES }
@@ -77,5 +86,6 @@ class DownloadSettings(context: Context) {
         val FORMAT_KEY = stringPreferencesKey("audio_format")
         val MP3_BITRATE_KEY = intPreferencesKey("mp3_bitrate")
         val SYNC_LYRICS_KEY = booleanPreferencesKey("sync_lyrics")
+        val OUTPUT_FOLDER_URI_KEY = stringPreferencesKey("output_folder_uri")
     }
 }

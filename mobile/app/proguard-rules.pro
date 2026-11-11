@@ -33,3 +33,6 @@
 
 # youtubedl-android resources and R class
 -keep class com.yausername.youtubedl_android.R$* { *; }
+
+# Apache Commons Compress registers ZIP extra-field implementations via reflection.
+-keep class org.apache.commons.compress.archivers.zip.** { *; }

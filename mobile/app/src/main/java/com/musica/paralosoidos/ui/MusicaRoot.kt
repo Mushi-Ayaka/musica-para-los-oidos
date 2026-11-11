@@ -162,7 +162,16 @@ fun MusicaRoot(
     requestAudioPermission: () -> Unit
 ) {
     val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(container.libraryRepository))
-    val downloaderViewModel: DownloaderViewModel = viewModel(factory = DownloaderViewModel.Factory(androidx.compose.ui.platform.LocalContext.current.applicationContext, container.downloadSettings, container.networkMonitor, container.downloadQueueManager, container.downloadHistoryDao))
+    val downloaderViewModel: DownloaderViewModel = viewModel(
+        factory = DownloaderViewModel.Factory(
+            androidx.compose.ui.platform.LocalContext.current.applicationContext,
+            container.downloadSettings,
+            container.networkMonitor,
+            container.downloadQueueManager,
+            container.downloadHistoryDao,
+            container.youtubeDLRuntime
+        )
+    )
     val tracks by libraryViewModel.tracks.collectAsStateWithLifecycle()
     val themeSettings by libraryViewModel.themeSettings.collectAsStateWithLifecycle()
     val customEqPresets by libraryViewModel.customEqPresets.collectAsStateWithLifecycle()

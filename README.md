@@ -10,6 +10,7 @@ La web es el prototipo visual y de interacción. La aplicación principal se est
 - `mobile/`: app Android nativa con biblioteca local mediante Room/MediaStore, reproducción en segundo plano con Media3, álbumes, listas editables, cola modificable, ecualizador y ajustes de estilo persistentes.
 - **Pestaña Carpetas:** navegación por directorios locales de música con capacidad de ocultar y mostrar carpetas específicas en la biblioteca.
 - **Descargador de audio:** módulo de búsqueda y descarga con selección de formato y calidad de bitrate (MP3/Original), detección de enlaces en portapapeles y protección automática por conectividad de red.
+- **Actualización del motor de descargas:** al iniciar la app se comprueba yt-dlp estable y se actualiza si hace falta; las descargas permanecen deshabilitadas hasta que el motor queda listo.
 - **Cola y notificaciones en segundo plano:** control interactivo de descargas activas, pausadas o en progreso mediante notificaciones del sistema con acciones integradas.
 - **Sincronización de letras LRC:** descarga paralela opcional de letras sincronizadas vía LRCLIB y auto-indexación en MediaStore mediante MediaScannerConnection al instante.
 - **Tracker de YouTube:** omite títulos numéricos o identificadores cortos, no procesa pistas de carpetas ocultas y puede cancelarse desde Ajustes. La búsqueda manual de títulos sospechosos requiere confirmar el video antes de guardar el vínculo.

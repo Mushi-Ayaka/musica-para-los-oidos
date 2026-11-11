@@ -33,7 +33,8 @@ class TrackTrackerManager(
     private val lyricsEngine: LyricsDownloadEngine,
     private val storageManager: DownloadStorageManager,
     private val notificationManager: DownloadNotificationManager,
-    private val preferences: AppPreferences
+    private val preferences: AppPreferences,
+    private val youtubeDLRuntime: com.musica.paralosoidos.data.download.YoutubeDLRuntime
 ) {
 
     suspend fun searchYouTubeCandidate(
@@ -51,10 +52,7 @@ class TrackTrackerManager(
 
         // 2. Respaldo mediante yt-dlp local
         try {
-            runCatching {
-                com.yausername.ffmpeg.FFmpeg.getInstance().init(context.applicationContext)
-                YoutubeDL.getInstance().init(context.applicationContext)
-            }
+            youtubeDLRuntime.ensureReady()
             val request = YoutubeDLRequest("ytsearch1:$query").apply {
                 addOption("--dump-json")
                 addOption("--no-playlist")
