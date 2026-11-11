@@ -12,6 +12,8 @@ La web es el prototipo visual y de interacción. La aplicación principal se est
 - **Descargador de audio:** módulo de búsqueda y descarga con selección de formato y calidad de bitrate (MP3/Original), detección de enlaces en portapapeles y protección automática por conectividad de red.
 - **Cola y notificaciones en segundo plano:** control interactivo de descargas activas, pausadas o en progreso mediante notificaciones del sistema con acciones integradas.
 - **Sincronización de letras LRC:** descarga paralela opcional de letras sincronizadas vía LRCLIB y auto-indexación en MediaStore mediante MediaScannerConnection al instante.
+- **Tracker de YouTube:** omite títulos numéricos o identificadores cortos, no procesa pistas de carpetas ocultas y puede cancelarse desde Ajustes. La búsqueda manual de títulos sospechosos requiere confirmar el video antes de guardar el vínculo.
+- **Importación de listas:** Ajustes permite importar JSON desde el botón dedicado; las coincidencias ambiguas se presentan para resolver antes de crear la lista.
 - El reproductor expandido permite deslizar entre portada y letras LRC sincronizadas. La app busca automáticamente un archivo `.lrc` con el nombre base del audio mediante MediaStore.
 - En Ajustes se pueden exportar los nombres de las canciones a TXT e importar listas JSON con el formato `{"name":"Favoritas","songs":["Cancion 1","Cancion 2"]}`. Los nombres deben coincidir de forma única con pistas de la biblioteca.
 - La app guarda una copia automática de listas, tema y presets del ecualizador en `Descargas/MusicaParaLosOidos/`. Al reinstalar intenta restaurarla automáticamente; también se puede exportar o restaurar manualmente desde Ajustes.

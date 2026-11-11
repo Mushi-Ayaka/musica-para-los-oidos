@@ -6,12 +6,14 @@ import com.musica.paralosoidos.data.CatalogTrackDao
 import com.musica.paralosoidos.data.CatalogTrackEntity
 import com.musica.paralosoidos.data.DownloadNotificationManager
 import com.musica.paralosoidos.data.DownloadStorageManager
+import com.musica.paralosoidos.data.DownloadSearchResult
 import com.musica.paralosoidos.data.TrackEntity
 import com.musica.paralosoidos.data.download.MetadataCleaner
 import com.musica.paralosoidos.data.lyrics.LyricsDownloadEngine
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -21,7 +23,8 @@ import java.io.File
 data class TrackSyncResult(
     val youtubeUrl: String?,
     val lrcContent: String?,
-    val hasLrcFile: Boolean
+    val hasLrcFile: Boolean,
+    val skippedAsSuspiciousTitle: Boolean = false
 )
 
 class TrackTrackerManager(
@@ -33,17 +36,18 @@ class TrackTrackerManager(
     private val preferences: AppPreferences
 ) {
 
-    suspend fun searchYouTubeMatch(track: TrackEntity): String? = withContext(Dispatchers.IO) {
+    suspend fun searchYouTubeCandidate(
+        track: TrackEntity,
+        allowSuspiciousTitle: Boolean = false
+    ): DownloadSearchResult? = withContext(Dispatchers.IO) {
+        if (!allowSuspiciousTitle && !isMusicTitle(track.title)) return@withContext null
         val clean = MetadataCleaner.clean(track.title, track.artist)
         val query = "${clean.artist} ${clean.title}".trim()
         if (query.isBlank()) return@withContext null
 
         // 1. Scraping HTTP instantaneo (sin esperar Python)
         val scraped = com.musica.paralosoidos.data.download.YouTubeSearchScraper.search(query, maxResults = 1)
-        val topId = scraped.firstOrNull()?.id
-        if (!topId.isNullOrBlank()) {
-            return@withContext "https://www.youtube.com/watch?v=$topId"
-        }
+        scraped.firstOrNull()?.let { return@withContext it }
 
         // 2. Respaldo mediante yt-dlp local
         try {
@@ -61,19 +65,36 @@ class TrackTrackerManager(
             val json = JSONObject(line)
             val videoId = json.optString("id", "")
             if (videoId.isNotBlank()) {
-                "https://www.youtube.com/watch?v=$videoId"
+                val title = json.optString("title", "Sin título")
+                DownloadSearchResult(
+                    id = videoId,
+                    title = title,
+                    channel = json.optString("channel", "Desconocido"),
+                    durationSeconds = json.optInt("duration", 0),
+                    thumbnailUrl = json.optString(
+                        "thumbnail",
+                        "https://img.youtube.com/vi/$videoId/mqdefault.jpg"
+                    )
+                )
             } else null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             android.util.Log.w("TrackTrackerManager", "Error buscando YT match para ${track.title}", e)
             null
         }
     }
 
+    suspend fun searchYouTubeMatch(track: TrackEntity): String? =
+        searchYouTubeCandidate(track)?.let { "https://www.youtube.com/watch?v=${it.id}" }
+
     suspend fun searchLrcMatch(track: TrackEntity): String? = withContext(Dispatchers.IO) {
         val clean = MetadataCleaner.clean(track.title, track.artist)
         val durationSec = (track.durationMs / 1000).toInt()
         try {
             lyricsEngine.fetchLyrics(clean.title, clean.artist, durationSec)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         }
@@ -117,8 +138,9 @@ class TrackTrackerManager(
         var ytUrl = existing?.youtubeUrl
         var lrcText: String? = null
         var lrcSynced = existing?.lrcSynced ?: false
+        val skippedAsSuspiciousTitle = !isMusicTitle(track.title)
 
-        if (forceRefresh || ytUrl.isNullOrBlank()) {
+        if (!skippedAsSuspiciousTitle && (forceRefresh || ytUrl.isNullOrBlank())) {
             val match = searchYouTubeMatch(track)
             if (!match.isNullOrBlank()) {
                 ytUrl = match
@@ -155,7 +177,8 @@ class TrackTrackerManager(
         TrackSyncResult(
             youtubeUrl = ytUrl,
             lrcContent = lrcText,
-            hasLrcFile = hasLrcLocally
+            hasLrcFile = hasLrcLocally,
+            skippedAsSuspiciousTitle = skippedAsSuspiciousTitle
         )
     }
 
@@ -177,16 +200,36 @@ class TrackTrackerManager(
             val cat = catalogMap[track.uri]
             val hasYt = !cat?.youtubeUrl.isNullOrBlank()
             val hasLrc = (cat?.lrcSynced == true) || hasLocalLrcFile(track)
-            !hasYt || !hasLrc
+            (!hasYt || !hasLrc) && isMusicTitle(track.title)
         }
 
         val total = pending.size
         pending.forEachIndexed { index, track ->
             onProgress(index + 1, total)
-            runCatching {
+            try {
                 syncSingleTrack(track, forceRefresh = false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.w("TrackTrackerManager", "No se pudo sincronizar ${track.title}", error)
             }
             delay(delayMs)
+        }
+    }
+
+    companion object {
+        private val NUMERIC_ONLY = Regex("""^\d+$""")
+        private val SHORT_ALPHANUMERIC = Regex("""^[A-Za-z0-9]{4,16}$""")
+        private val HAS_SPACE_OR_COMMON_SEPARATOR = Regex("""[\s\-_.]""")
+
+        fun isMusicTitle(title: String): Boolean {
+            val value = title.trim()
+            if (value.length < 3) return false
+            if (NUMERIC_ONLY.matches(value)) return false
+            if (SHORT_ALPHANUMERIC.matches(value) &&
+                !HAS_SPACE_OR_COMMON_SEPARATOR.containsMatchIn(value)
+            ) return false
+            return true
         }
     }
 }

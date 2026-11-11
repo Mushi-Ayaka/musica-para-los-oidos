@@ -20,6 +20,7 @@ junit = "4.13.2"
 androidxJunit = "1.2.1"
 espresso = "3.6.1"
 youtubedl-android = "0.18.1"
+quickjs-wrapper = "3.2.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -55,6 +56,7 @@ androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "a
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
 youtubedl-android-lib = { module = "io.github.junkfood02.youtubedl-android:library", version.ref = "youtubedl-android" }
 youtubedl-android-ffmpeg = { module = "io.github.junkfood02.youtubedl-android:ffmpeg", version.ref = "youtubedl-android" }
+quickjs-wrapper-android = { module = "wang.harlon.quickjs:wrapper-android", version.ref = "quickjs-wrapper" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

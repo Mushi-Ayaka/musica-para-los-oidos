@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -103,8 +104,10 @@ import com.musica.paralosoidos.data.AppContainer
 import com.musica.paralosoidos.BuildConfig
 import com.musica.paralosoidos.data.AudioOutputProfileIds
 import com.musica.paralosoidos.data.AutoBackupCodec
+import com.musica.paralosoidos.data.DownloadSearchResult
 import com.musica.paralosoidos.data.PlaylistImportPlan
 import com.musica.paralosoidos.data.PlaylistTextCodec
+import com.musica.paralosoidos.data.tracker.TrackTrackerManager
 import com.musica.paralosoidos.playback.AudioEffectsManager
 import com.musica.paralosoidos.ui.LyricsSettingsSection
 import com.musica.paralosoidos.ui.ThemeSettingsSection
@@ -133,6 +136,8 @@ import com.musica.paralosoidos.ui.update.UpdateCircleButton
 import com.musica.paralosoidos.ui.update.UpdateDialog
 import com.musica.paralosoidos.ui.update.UpdateViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -208,7 +213,8 @@ fun MusicaRoot(
 
     var missingTracksFromBackup by remember { mutableStateOf<List<com.musica.paralosoidos.data.backup.TrackMetadataBackup>?>(null) }
     var trackerSyncProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var isTrackerSyncing by remember { mutableStateOf(false) }
+    var trackerJob by remember { mutableStateOf<Job?>(null) }
+    val isTrackerSyncing = trackerJob != null
     var selectedTrackForLinks by remember { mutableStateOf<com.musica.paralosoidos.data.TrackEntity?>(null) }
 
     val catalogTracks by container.catalogTracks.observeAll().collectAsStateWithLifecycle(emptyList())
@@ -224,12 +230,32 @@ fun MusicaRoot(
     val downloadRetryCount by container.preferences.downloadRetryCount.collectAsStateWithLifecycle(1)
     val autoBackupInterval by container.preferences.autoBackupInterval.collectAsStateWithLifecycle("DAILY")
 
-    LaunchedEffect(tracks) {
-        if (tracks.isNotEmpty()) {
-            val freq = container.preferences.trackerFrequency.first()
-            if (freq == "ON_APP_OPEN" || freq == "ON_NEW_TRACKS_ONLY") {
-                container.trackTrackerManager.runAutoTracking(tracks)
+    fun startTrackerSync(tracksToSync: List<com.musica.paralosoidos.data.TrackEntity>) {
+        if (tracksToSync.isEmpty() || trackerJob != null) return
+        trackerJob = coroutineScope.launch {
+            trackerSyncProgress = 0 to tracksToSync.size
+            try {
+                container.trackTrackerManager.runAutoTracking(tracksToSync) { current, total ->
+                    trackerSyncProgress = current to total
+                }
+                playlistMessage = "Sincronización de Trackers finalizada."
+            } catch (cancelled: CancellationException) {
+                playlistMessage = "Sincronización cancelada."
+                throw cancelled
+            } catch (error: Exception) {
+                playlistMessage = "Falló la sincronización: ${error.localizedMessage ?: "error desconocido"}"
+            } finally {
+                trackerSyncProgress = null
+                trackerJob = null
             }
+        }
+    }
+
+    LaunchedEffect(visibleTracks, trackerFrequency) {
+        if ((trackerFrequency == "ON_APP_OPEN" || trackerFrequency == "ON_NEW_TRACKS_ONLY") &&
+            visibleTracks.isNotEmpty()
+        ) {
+            startTrackerSync(visibleTracks)
         }
     }
 
@@ -1345,6 +1371,13 @@ fun MusicaRoot(
                                         Text("Restaurar copia completa (.json)")
                                     }
 
+                                    OutlinedButton(
+                                        onClick = { importPlaylistJson.launch(arrayOf("application/json", "text/*")) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Importar lista de reproducción (.json)")
+                                    }
+
                                     Button(
                                         onClick = {
                                             coroutineScope.launch {
@@ -1430,20 +1463,26 @@ fun MusicaRoot(
 
                                     Button(
                                         onClick = {
-                                            coroutineScope.launch {
-                                                isTrackerSyncing = true
-                                                container.trackTrackerManager.runAutoTracking(tracks) { cur, tot ->
-                                                    trackerSyncProgress = cur to tot
-                                                }
-                                                isTrackerSyncing = false
-                                                trackerSyncProgress = null
-                                                playlistMessage = "Sincronización de Trackers finalizada."
-                                            }
+                                            startTrackerSync(visibleTracks)
                                         },
-                                        enabled = !isTrackerSyncing && tracks.isNotEmpty(),
+                                        enabled = !isTrackerSyncing && visibleTracks.isNotEmpty(),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(if (isTrackerSyncing) "Sincronizando..." else "Sincronizar Trackers ahora")
+                                    }
+
+                                    if (isTrackerSyncing) {
+                                        OutlinedButton(
+                                            onClick = { trackerJob?.cancel() },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.error
+                                            )
+                                        ) {
+                                            Icon(Icons.Default.Stop, contentDescription = null)
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Detener Tracker")
+                                        }
                                     }
                                 }
                             }
@@ -1589,7 +1628,10 @@ fun MusicaRoot(
                 }
             },
             onAutoSearchYouTube = {
-                container.trackTrackerManager.searchYouTubeMatch(currentTrack)
+                container.trackTrackerManager.searchYouTubeCandidate(
+                    currentTrack,
+                    allowSuspiciousTitle = true
+                )
             },
             onAutoSearchLrc = {
                 container.trackTrackerManager.searchLrcMatch(currentTrack)

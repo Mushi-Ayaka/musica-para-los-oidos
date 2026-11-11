@@ -17,8 +17,8 @@ android {
         applicationId = "com.musica.paralosoidos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.4.3"
+        versionCode = 17
+        versionName = "1.4.4"
 
         manifestPlaceholders["appLabel"] = "@string/app_name"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -119,6 +119,7 @@ dependencies {
     implementation(project(":feature:downloader"))
 
     implementation(libs.coil.compose)
+    debugImplementation(libs.quickjs.wrapper.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

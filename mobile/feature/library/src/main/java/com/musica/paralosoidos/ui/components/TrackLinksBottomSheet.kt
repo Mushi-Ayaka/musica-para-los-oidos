@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -50,8 +51,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.musica.paralosoidos.data.CatalogTrackEntity
+import com.musica.paralosoidos.data.DownloadSearchResult
 import com.musica.paralosoidos.data.TrackEntity
+import com.musica.paralosoidos.data.tracker.TrackTrackerManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,7 +68,7 @@ fun TrackLinksBottomSheet(
     sheetState: SheetState,
     onDismiss: () -> Unit,
     onSave: (youtubeUrl: String?, lrcPath: String?, lrcSynced: Boolean) -> Unit,
-    onAutoSearchYouTube: suspend () -> String?,
+    onAutoSearchYouTube: suspend () -> DownloadSearchResult?,
     onAutoSearchLrc: suspend () -> String?,
     onDownloadLrc: suspend (String) -> Boolean,
     onUnlink: () -> Unit,
@@ -79,6 +85,7 @@ fun TrackLinksBottomSheet(
     var foundLrcContent by remember { mutableStateOf<String?>(null) }
     var isDownloadingLrc by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
+    var pendingYouTubeMatch by remember { mutableStateOf<DownloadSearchResult?>(null) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -174,14 +181,25 @@ fun TrackLinksBottomSheet(
                             scope.launch {
                                 isSearchingYt = true
                                 statusMessage = null
-                                val match = onAutoSearchYouTube()
-                                if (!match.isNullOrBlank()) {
-                                    ytUrl = match
-                                    statusMessage = "Coincidencia de YouTube encontrada."
-                                } else {
-                                    statusMessage = "No se encontro coincidencia en YouTube."
+                                try {
+                                    val match = onAutoSearchYouTube()
+                                    if (match != null) {
+                                        if (TrackTrackerManager.isMusicTitle(track.title)) {
+                                            ytUrl = "https://www.youtube.com/watch?v=${match.id}"
+                                            statusMessage = "Coincidencia de YouTube encontrada."
+                                        } else {
+                                            pendingYouTubeMatch = match
+                                        }
+                                    } else {
+                                        statusMessage = "No se encontro coincidencia en YouTube."
+                                    }
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
+                                    statusMessage = "Error al buscar en YouTube: ${error.localizedMessage ?: "error desconocido"}"
+                                } finally {
+                                    isSearchingYt = false
                                 }
-                                isSearchingYt = false
                             }
                         },
                         enabled = !isSearchingYt,
@@ -364,5 +382,48 @@ fun TrackLinksBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
         }
+    }
+
+    pendingYouTubeMatch?.let { match ->
+        AlertDialog(
+            onDismissRequest = {
+                pendingYouTubeMatch = null
+                statusMessage = "Vínculo de YouTube descartado."
+            },
+            title = { Text("Confirma el vínculo") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AsyncImage(
+                        model = "https://img.youtube.com/vi/${match.id}/mqdefault.jpg",
+                        contentDescription = "Miniatura de ${match.title}",
+                        modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Text(match.title, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "El título de esta pista parece un identificador. Confirma que el video corresponde a la canción antes de guardar el vínculo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    ytUrl = "https://www.youtube.com/watch?v=${match.id}"
+                    pendingYouTubeMatch = null
+                    statusMessage = "Coincidencia confirmada. Pulsa Guardar para conservarla."
+                }) {
+                    Text("Aceptar vínculo")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingYouTubeMatch = null
+                    statusMessage = "Vínculo de YouTube descartado."
+                }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
