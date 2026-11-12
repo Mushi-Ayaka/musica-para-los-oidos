@@ -92,6 +92,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import com.musica.paralosoidos.data.TrackEntity
+import com.musica.paralosoidos.data.CatalogTrackEntity
 import com.musica.paralosoidos.playback.LrcLyrics
 import com.musica.paralosoidos.playback.LyricsFileRepository
 import com.musica.paralosoidos.playback.LyricsSearchResult
@@ -99,6 +100,7 @@ import com.musica.paralosoidos.ui.theme.MusicaStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.text.Charsets
 
 @Composable
 fun MiniPlayer(
@@ -178,6 +180,7 @@ fun MiniPlayer(
 @Composable
 fun FullPlayer(
     track: TrackEntity,
+    catalogEntry: CatalogTrackEntity?,
     queue: List<TrackEntity>,
     allTracks: List<TrackEntity>,
     controller: MediaController?,
@@ -249,18 +252,7 @@ fun FullPlayer(
                         modifier = Modifier.fillMaxSize()
                     ) { page ->
                         if (page == 0) {
-                            Column(
-                                Modifier.fillMaxSize(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Bottom
-                            ) {
-                                Text(
-                                    "Desliza para ver las letras",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 6.dp)
-                                )
-                            }
+                            Box(Modifier.fillMaxSize()) // invisible, el HorizontalPager ya maneja el swipe aquí
                         } else {
                             Column(Modifier.fillMaxSize()) {
                                 Row(
@@ -286,6 +278,7 @@ fun FullPlayer(
                                 LyricsPane(
                                     modifier = Modifier.fillMaxWidth().weight(1f),
                                     track = track,
+                                    catalogEntry = catalogEntry,
                                     positionMs = { position().toLong() },
                                     scrollSpeed = lyricsScrollSpeed,
                                     onOpenSettings = onOpenLyricsSettings
@@ -344,6 +337,12 @@ fun FullPlayer(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MusicaStyle.Colors.neutral,
                                     maxLines = 1
+                                )
+                                Text(
+                                    "Desliza la portada para ver letras",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.padding(top = 2.dp)
                                 )
                             }
                         }
@@ -773,6 +772,7 @@ internal fun PlaybackTimeLabels(
 internal fun LyricsPane(
     modifier: Modifier = Modifier,
     track: TrackEntity,
+    catalogEntry: CatalogTrackEntity?,   // <-- nuevo parámetro
     positionMs: () -> Long,
     scrollSpeed: Float,
     onOpenSettings: () -> Unit
@@ -787,6 +787,40 @@ internal fun LyricsPane(
         result = null
         result = withContext(Dispatchers.IO) {
             runCatching {
+                // 1. Intentar ruta vinculada en catalogo primero
+                val linkedPath = catalogEntry?.lrcPath
+                    ?.takeIf { it.isNotBlank() && it != "vinculado" && it != "local" }
+                if (linkedPath != null) {
+                    val file = java.io.File(linkedPath)
+                    if (file.exists() && file.length() > 0) {
+                        val text = file.readText(Charsets.UTF_8)
+                        val document = LrcLyrics.parseDocument(text)
+                        if (document.lines.isNotEmpty()) {
+                            return@runCatching LyricsSearchResult(
+                                sourceName = file.name,
+                                document = document,
+                                logs = listOf("Letra cargada desde vinculo: ${file.name}.")
+                            )
+                        }
+                    }
+                }
+                // 2. Intentar archivo .lrc junto al archivo de audio
+                if (track.folderPath.isNotBlank()) {
+                    val nameWithoutExt = track.displayName.substringBeforeLast('.')
+                    val sidecatFile = java.io.File(track.folderPath, "$nameWithoutExt.lrc")
+                    if (sidecatFile.exists() && sidecatFile.length() > 0) {
+                        val text = sidecatFile.readText(Charsets.UTF_8)
+                        val document = LrcLyrics.parseDocument(text)
+                        if (document.lines.isNotEmpty()) {
+                            return@runCatching LyricsSearchResult(
+                                sourceName = sidecatFile.name,
+                                document = document,
+                                logs = listOf("Letra cargada desde carpeta del audio: ${sidecatFile.name}.")
+                            )
+                        }
+                    }
+                }
+                // 3. Fallback: buscar en MediaStore
                 LyricsFileRepository.findMatchingLyrics(
                     context = context,
                     audioFileName = track.displayName,
@@ -823,7 +857,7 @@ internal fun LyricsPane(
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(10.dp))
-                Text("Buscando coincidencias en MediaStore...", style = MaterialTheme.typography.bodySmall)
+                Text("Cargando letra...", style = MaterialTheme.typography.bodySmall)
             }
         } else {
             val document = result?.document
@@ -854,11 +888,6 @@ internal fun LyricsPane(
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Reintentar")
-                        }
-                        OutlinedButton(onClick = onOpenSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Ajustes")
                         }
                     }
                 }

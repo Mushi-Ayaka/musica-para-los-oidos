@@ -119,6 +119,28 @@ class TrackTrackerManager(
                 storageManager.getLyricsFile(track.title)
             }
             lyricsEngine.writeLrcFile(destFile, lrcContent)
+            // --- NUEVO: actualizar catalogo con la ruta real ---
+            val absolutePath = destFile.absolutePath
+            val existing = catalogTrackDao.observeAll().first().firstOrNull { it.localUri == track.uri }
+            if (existing != null) {
+                catalogTrackDao.upsert(existing.copy(lrcPath = absolutePath, lrcSynced = true))
+            } else {
+                catalogTrackDao.upsert(
+                    CatalogTrackEntity(
+                        id = "local-${track.id}",
+                        title = track.title,
+                        artist = track.artist,
+                        album = track.album,
+                        durationMs = track.durationMs,
+                        youtubeUrl = null,
+                        localUri = track.uri,
+                        metadataJson = "{}",
+                        lrcPath = absolutePath,
+                        lrcSynced = true
+                    )
+                )
+            }
+            // --- FIN NUEVO ---
             destFile
         } catch (_: Exception) {
             null
@@ -219,11 +241,25 @@ class TrackTrackerManager(
         private val NUMERIC_ONLY = Regex("""^\d+$""")
         private val SHORT_ALPHANUMERIC = Regex("""^[A-Za-z0-9]{4,16}$""")
         private val HAS_SPACE_OR_COMMON_SEPARATOR = Regex("""[\s\-_.]""")
-
+        // Prefijos de archivos generados automaticamente (WhatsApp, grabadoras, llamadas)
+        private val GENERATED_FILE_PREFIXES = Regex(
+            """^(AUD|PTT|VID|IMG|DOC|AUDIO|VOICE|REC|Recording|record|call_rec|llamada|grabacion|grabación|note|NOTE)[-_\d]""",
+            RegexOption.IGNORE_CASE
+        )
+        // Patron de fecha como nombre: 20260629, 2026-06-29, 26062906, etc.
+        private val DATE_PATTERN = Regex("""^\d{6,8}$""")
+        // Patron alfanumerico con guion y numeros: AUD-20260629-WA0090
+        private val WHATSAPP_PATTERN = Regex(
+            """^[A-Z]{2,5}-\d{8}-[A-Z]{2}\d{4}$""",
+            RegexOption.IGNORE_CASE
+        )
         fun isMusicTitle(title: String): Boolean {
             val value = title.trim()
             if (value.length < 3) return false
             if (NUMERIC_ONLY.matches(value)) return false
+            if (DATE_PATTERN.matches(value)) return false
+            if (WHATSAPP_PATTERN.matches(value)) return false
+            if (GENERATED_FILE_PREFIXES.containsMatchIn(value)) return false
             if (SHORT_ALPHANUMERIC.matches(value) &&
                 !HAS_SPACE_OR_COMMON_SEPARATOR.containsMatchIn(value)
             ) return false

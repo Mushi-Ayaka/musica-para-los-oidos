@@ -82,8 +82,6 @@ fun TrackLinksBottomSheet(
 
     var isSearchingYt by remember { mutableStateOf(false) }
     var isSearchingLrc by remember { mutableStateOf(false) }
-    var foundLrcContent by remember { mutableStateOf<String?>(null) }
-    var isDownloadingLrc by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var pendingYouTubeMatch by remember { mutableStateOf<DownloadSearchResult?>(null) }
 
@@ -220,7 +218,7 @@ fun TrackLinksBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Card 2: LRC Tracker
+            // Card 2: LRC Tracker — NUEVO DISEÑO
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -250,7 +248,7 @@ fun TrackLinksBottomSheet(
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                if (hasLrcLinked) "Letra disponible" else "Sin letra",
+                                if (hasLrcLinked) "Letra vinculada" else "Sin letra",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (hasLrcLinked) MaterialTheme.colorScheme.onSecondaryContainer
@@ -258,77 +256,48 @@ fun TrackLinksBottomSheet(
                             )
                         }
                     }
-
                     Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = lrcPath,
-                        onValueChange = {
-                            lrcPath = it
-                            if (it.isNotBlank()) isLrcSynced = true
-                        },
-                        label = { Text("Ruta o estado de archivo .lrc") },
-                        placeholder = { Text("local / /sdcard/Music/...") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    isSearchingLrc = true
-                                    statusMessage = null
+                    // Boton unico: buscar + descargar + vincular atomicamente
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                isSearchingLrc = true
+                                statusMessage = null
+                                try {
                                     val lyrics = onAutoSearchLrc()
                                     if (!lyrics.isNullOrBlank()) {
-                                        foundLrcContent = lyrics
-                                        isLrcSynced = true
-                                        statusMessage = "Letra sincronizada encontrada en LRCLIB."
+                                        val ok = onDownloadLrc(lyrics)
+                                        if (ok) {
+                                            isLrcSynced = true
+                                            lrcPath = "vinculado"
+                                            statusMessage = "Letra descargada y vinculada correctamente."
+                                        } else {
+                                            statusMessage = "Se encontro letra pero no se pudo guardar el archivo."
+                                        }
                                     } else {
-                                        statusMessage = "No se encontro letra en LRCLIB."
+                                        statusMessage = "No se encontro letra en LRCLIB para esta pista."
                                     }
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
+                                    statusMessage = "Error al buscar letra: ${error.localizedMessage ?: "error desconocido"}"
+                                } finally {
                                     isSearchingLrc = false
                                 }
-                            },
-                            enabled = !isSearchingLrc,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            if (isSearchingLrc) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Buscar en LRCLIB")
                             }
-                        }
-
-                        if (foundLrcContent != null) {
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        isDownloadingLrc = true
-                                        val ok = onDownloadLrc(foundLrcContent!!)
-                                        if (ok) {
-                                            lrcPath = "local"
-                                            isLrcSynced = true
-                                            statusMessage = "Archivo .lrc guardado con exito."
-                                        } else {
-                                            statusMessage = "Error al escribir el archivo .lrc."
-                                        }
-                                        isDownloadingLrc = false
-                                    }
-                                },
-                                enabled = !isDownloadingLrc
-                            ) {
-                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Descargar")
-                            }
+                        },
+                        enabled = !isSearchingLrc,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isSearchingLrc) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Buscando y descargando letra...")
+                        } else {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            val hasLrc = isLrcSynced || lrcPath.isNotBlank()
+                            Text(if (hasLrc) "Actualizar letra de LRCLIB" else "Descargar letra de LRCLIB")
                         }
                     }
                 }

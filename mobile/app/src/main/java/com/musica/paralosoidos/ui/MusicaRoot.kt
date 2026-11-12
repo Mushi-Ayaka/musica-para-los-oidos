@@ -4,10 +4,12 @@ import com.musica.paralosoidos.data.backup.PlaybackBackupState
 import com.musica.paralosoidos.ui.components.TrackLinksBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import java.io.File
 import kotlinx.coroutines.flow.first
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,6 +53,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Card
@@ -195,6 +198,10 @@ fun MusicaRoot(
     val virtualizer by container.preferences.virtualizer.collectAsStateWithLifecycle(initialValue = 0)
     val speakerBoost by container.preferences.speakerBoost.collectAsStateWithLifecycle(initialValue = 0)
     val mediaVolume by container.preferences.mediaVolume.collectAsStateWithLifecycle(initialValue = 100f)
+    val recentTrackIds by container.preferences.recentTrackIds.collectAsStateWithLifecycle(
+        initialValue = emptyList(),
+        lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    )
 
     val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container.libraryRepository))
     val nowPlaying by playbackViewModel.nowPlaying.collectAsStateWithLifecycle()
@@ -258,6 +265,43 @@ fun MusicaRoot(
                 trackerJob = null
             }
         }
+    }
+
+    fun updateRecentTracks(track: com.musica.paralosoidos.data.TrackEntity) {
+        coroutineScope.launch {
+            // Obtener IDs actuales directamente desde las preferencias
+            kotlin.runCatching {
+                val recentIds = container.preferences.recentTrackIds.first()
+                val currentIds = recentIds.toMutableList()
+                // Remover si ya existe
+                currentIds.remove(track.id)
+                // Agregar al inicio
+                currentIds.add(0, track.id)
+                // Mantener solo las últimas 3
+                container.preferences.saveRecentTrackIds(currentIds.take(3))
+            }
+        }
+    }
+
+    fun updateRecentPlaylists(playlistId: String) {
+        coroutineScope.launch {
+            // Obtener IDs actuales directamente desde las preferencias
+            kotlin.runCatching {
+                val recentIds = container.preferences.recentPlaylistIds.first()
+                val currentIds = recentIds.toMutableList()
+                // Remover si ya existe
+                currentIds.remove(playlistId)
+                // Agregar al inicio
+                currentIds.add(0, playlistId)
+                // Mantener solo las últimas 3
+                container.preferences.saveRecentPlaylistIds(currentIds.take(3))
+            }
+        }
+    }
+
+    fun playTrackAndUpdateRecent(track: com.musica.paralosoidos.data.TrackEntity, trackList: List<com.musica.paralosoidos.data.TrackEntity>) {
+        playbackViewModel.playTrack(track, trackList)
+        updateRecentTracks(track)
     }
 
     LaunchedEffect(visibleTracks, trackerFrequency) {
@@ -611,7 +655,7 @@ fun MusicaRoot(
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { playbackViewModel.playTrack(featuredTrack, tracks) },
+                                    .clickable { playTrackAndUpdateRecent(featuredTrack, tracks) },
                                 shape = MusicaStyle.Shape.large,
                                 border = BorderStroke(1.dp, MusicaStyle.Colors.overlay),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -693,7 +737,11 @@ fun MusicaRoot(
                         )
                     }
 
-                    if (tracks.isEmpty()) {
+                    // Calcular pistas recientes directamente
+                    val tracksById = tracks.associateBy { it.id }
+                    val recentTracks = recentTrackIds.mapNotNull { id -> tracksById[id] }
+
+                    if (recentTracks.isEmpty() && tracks.isEmpty()) {
                         item {
                             EmptyLibrary(
                                 hasPermission = hasAudioPermission(),
@@ -704,13 +752,26 @@ fun MusicaRoot(
                                 }
                             )
                         }
+                    } else if (recentTracks.isNotEmpty()) {
+                        items(recentTracks, key = { "recent-${it.id}" }) { track ->
+                            val cat = catalogMap[track.uri]
+                            val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
+                            TrackRow(
+                                track = track,
+                                onClick = { playTrackAndUpdateRecent(track, tracks) },
+                                isLinked = isLinked,
+                                trackerColor = trackerCircleColor,
+                                onTrackerClick = { selectedTrackForLinks = track }
+                            )
+                        }
                     } else {
+                        // Mostrar primeras pistas de la biblioteca si no hay recientes
                         items(tracks.take(6), key = { "home-${it.id}" }) { track ->
                             val cat = catalogMap[track.uri]
                             val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
                             TrackRow(
                                 track = track,
-                                onClick = { playbackViewModel.playTrack(track, tracks) },
+                                onClick = { playTrackAndUpdateRecent(track, tracks) },
                                 isLinked = isLinked,
                                 trackerColor = trackerCircleColor,
                                 onTrackerClick = { selectedTrackForLinks = track }
@@ -770,7 +831,7 @@ fun MusicaRoot(
                             items(albums, key = { "album-${it.first}" }) { (albumName, albumTracks) ->
                                 Card(
                                     modifier = Modifier.fillMaxWidth().clickable {
-                                        playbackViewModel.playTrack(albumTracks.first(), albumTracks)
+                                        playTrackAndUpdateRecent(albumTracks.first(), albumTracks)
                                     },
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                                 ) {
@@ -900,7 +961,7 @@ fun MusicaRoot(
                                         }
                                         Button(
                                             onClick = {
-                                                if (selectedFolderTracks.isNotEmpty()) playbackViewModel.playTrack(selectedFolderTracks.first(), selectedFolderTracks)
+                                                if (selectedFolderTracks.isNotEmpty()) playTrackAndUpdateRecent(selectedFolderTracks.first(), selectedFolderTracks)
                                             },
                                             enabled = selectedFolderTracks.isNotEmpty(),
                                             modifier = Modifier.fillMaxWidth()
@@ -917,7 +978,7 @@ fun MusicaRoot(
                                 val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
                                 TrackRow(
                                     track = track,
-                                    onClick = { playbackViewModel.playTrack(track, selectedFolderTracks) },
+                                    onClick = { playTrackAndUpdateRecent(track, selectedFolderTracks) },
                                     isLinked = isLinked,
                                     trackerColor = trackerCircleColor,
                                     onTrackerClick = { selectedTrackForLinks = track }
@@ -1350,6 +1411,62 @@ fun MusicaRoot(
                                             }
                                         }
                                     }
+
+                                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                                    // Selector de carpeta de descarga
+                                    val downloadSettingsState by container.downloadSettings.state.collectAsStateWithLifecycle(
+                                        initialValue = com.musica.paralosoidos.data.DownloadSettingsState(),
+                                        lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+                                    )
+                                    val downloadFolderLabel = downloadSettingsState.outputFolderUri?.let { rawUri ->
+                                        android.net.Uri.parse(rawUri).lastPathSegment.orEmpty()
+                                            .substringAfter(':')
+                                            .substringAfterLast('/')
+                                    }
+                                    val downloadFolderPicker = rememberLauncherForActivityResult(
+                                        ActivityResultContracts.OpenDocumentTree()
+                                    ) { uri ->
+                                        if (uri != null) {
+                                            try {
+                                                context.contentResolver.takePersistableUriPermission(
+                                                    uri,
+                                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                                                )
+                                                coroutineScope.launch {
+                                                    container.downloadSettings.saveOutputFolderUri(uri.toString())
+                                                }
+                                            } catch (error: SecurityException) {
+                                                playlistMessage = "No se pudo acceder a la carpeta: ${error.localizedMessage ?: "permiso denegado"}"
+                                            }
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                "Carpeta de descarga",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                downloadFolderLabel?.let { "Actual: $it" } ?: "Sin configurar",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (downloadFolderLabel != null)
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                else
+                                                    MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                        OutlinedButton(
+                                            onClick = { downloadFolderPicker.launch(null) },
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text(if (downloadFolderLabel != null) "Cambiar" else "Elegir")
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1458,12 +1575,15 @@ fun MusicaRoot(
                                 border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    val ytCount = catalogTracks.count { !it.youtubeUrl.isNullOrBlank() }
-                                    val lrcCount = catalogTracks.count { it.lrcSynced }
+                                    // Solo contar entradas que tienen una pista local correspondiente en la biblioteca actual
+                                    val localUris = tracks.map { it.uri }.toSet()
+                                    val activeCatalog = catalogTracks.filter { it.localUri != null && it.localUri in localUris }
+                                    val ytCount = activeCatalog.count { !it.youtubeUrl.isNullOrBlank() }
+                                    val lrcCount = activeCatalog.count { it.lrcSynced || !it.lrcPath.isNullOrBlank() }
 
                                     Text("Canciones en biblioteca: ${tracks.size}", style = MaterialTheme.typography.bodyMedium)
-                                    Text("Vinculadas a YouTube: $ytCount", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                                    Text("Con letra LRC sincronizada: $lrcCount", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+                                    Text("Vinculadas a YouTube: $ytCount / ${tracks.size}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                                    Text("Con letra LRC: $lrcCount / ${tracks.size}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
 
                                     if (trackerSyncProgress != null) {
                                         val (cur, tot) = trackerSyncProgress!!
@@ -1507,9 +1627,11 @@ fun MusicaRoot(
     }
 
     // Reproductor a pantalla completa sobre la raiz
-    if (showPlayer && nowPlaying != null) {
+    if (showPlayer) {
+        nowPlaying?.let { currentTrack ->
         FullPlayer(
-            track = nowPlaying!!,
+            track = currentTrack,
+            catalogEntry = catalogMap[currentTrack.uri],
             queue = playbackQueue,
             allTracks = tracks,
             controller = controller,
@@ -1532,6 +1654,7 @@ fun MusicaRoot(
             },
             onClose = { showPlayer = false }
         )
+        }
     }
 
     if (showNewPlaylistDialog) {

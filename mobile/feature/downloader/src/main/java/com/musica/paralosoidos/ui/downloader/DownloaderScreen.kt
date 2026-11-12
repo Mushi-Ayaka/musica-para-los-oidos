@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Badge
@@ -87,24 +88,6 @@ fun DownloaderScreen(
         youtubeDLState == YoutubeDLState.Ready &&
         !settings.outputFolderUri.isNullOrBlank()
     val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val context = LocalContext.current
-    val downloadFolderPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-                viewModel.saveDownloadFolder(uri)
-            } catch (error: SecurityException) {
-                viewModel.showMessage(
-                    "Android no concedió acceso a la carpeta: ${error.localizedMessage ?: "permiso denegado"}"
-                )
-            }
-        }
-    }
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -229,19 +212,41 @@ fun DownloaderScreen(
             }
         }
 
-        val selectedFolderLabel = settings.outputFolderUri?.let { rawUri ->
-            Uri.parse(rawUri).lastPathSegment.orEmpty()
-                .substringAfter(':')
-                .substringAfterLast('/')
-        }
-        OutlinedButton(
-            onClick = { downloadFolderPicker.launch(null) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                selectedFolderLabel?.let { "Carpeta de descarga: $it (cambiar)" }
-                    ?: "Elegir carpeta para guardar descargas"
-            )
+        // Banner: carpeta de descarga no configurada
+        if (settings.outputFolderUri.isNullOrBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.FolderOpen,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Configura la carpeta de descarga",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Para descargar canciones y letras (.lrc), primero elige la carpeta de destino en Ajustes > Trackers y Descargas.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
         }
 
         // Service Blocked (YouTube Bot Detection / OTA update) Banner
@@ -362,7 +367,6 @@ fun DownloaderScreen(
                 )
             }
         } else if (!isSearching) {
-            // Guide / Initial Empty State
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -374,24 +378,47 @@ fun DownloaderScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.padding(horizontal = 24.dp)
                 ) {
-                    Icon(
-                        Icons.Default.CloudDownload,
-                        contentDescription = null,
-                        modifier = Modifier.size(54.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                    )
-                    Text(
-                        "Busca musica en YouTube",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        "Escribe el nombre de la cancion, artista o pega un enlace de YouTube directamente para comenzar a descargar.",
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                    )
+                    if (settings.outputFolderUri.isNullOrBlank()) {
+                        // Sin carpeta configurada: guiar al usuario
+                        Icon(
+                            Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            modifier = Modifier.size(54.dp),
+                            tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            "Primero configura la carpeta",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Ve a Ajustes > Trackers y Descargas y elige la carpeta donde se guardaran las canciones y los archivos .lrc descargados.",
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    } else {
+                        // Con carpeta: guia de busqueda normal
+                        Icon(
+                            Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(54.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            "Busca musica en YouTube",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Escribe el nombre de la cancion, artista o pega un enlace de YouTube directamente para comenzar a descargar.",
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
                 }
             }
         }

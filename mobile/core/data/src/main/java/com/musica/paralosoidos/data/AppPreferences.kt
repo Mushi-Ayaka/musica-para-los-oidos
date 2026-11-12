@@ -262,6 +262,20 @@ class AppPreferences(context: Context) {
         }
     }
 
+    // Guarda los IDs de las últimas 3 pistas reproducidas (como String separado por comas)
+    suspend fun saveRecentTrackIds(ids: List<Long>) {
+        dataStore.edit { it[RECENT_TRACK_IDS] = ids.take(3).joinToString(",") }
+    }
+    val recentTrackIds: Flow<List<Long>>
+        get() = dataStore.data.map { prefs -> prefs[RECENT_TRACK_IDS]?.split(",")?.mapNotNull { it.toLongOrNull() } ?: emptyList() }
+
+    // Guarda los IDs de las últimas 3 listas reproducidas (como String separado por comas)
+    suspend fun saveRecentPlaylistIds(ids: List<String>) {
+        dataStore.edit { it[RECENT_PLAYLIST_IDS] = ids.take(3).joinToString(",") }
+    }
+    val recentPlaylistIds: Flow<List<String>>
+        get() = dataStore.data.map { prefs -> prefs[RECENT_PLAYLIST_IDS]?.split(",") ?: emptyList() }
+
     private companion object {
         val THEME_KEY = stringPreferencesKey("theme_settings")
         val EQ_PRESETS_KEY = stringPreferencesKey("custom_eq_presets")
@@ -284,6 +298,8 @@ class AppPreferences(context: Context) {
         val DOWNLOAD_CONCURRENCY_KEY = intPreferencesKey("download_concurrency")
         val DOWNLOAD_RETRY_COUNT_KEY = intPreferencesKey("download_retry_count")
         val AUTO_BACKUP_INTERVAL_KEY = stringPreferencesKey("auto_backup_interval")
+        val RECENT_TRACK_IDS = stringPreferencesKey("recent_track_ids")
+        val RECENT_PLAYLIST_IDS = stringPreferencesKey("recent_playlist_ids")
         val HEX_COLOR_PATTERN = Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
         val SUPPORTED_FONT_FAMILIES = setOf("jakarta", "system", "serif", "mono")
     }
