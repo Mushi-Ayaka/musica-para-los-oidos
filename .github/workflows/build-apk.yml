@@ -1,4 +1,4 @@
-name: Build Android APK
+﻿name: Build Android APK
 
 on:
   push:
@@ -65,9 +65,9 @@ jobs:
 
       - name: Publish prerelease
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          name: Música para los Oídos ${{ github.ref_name }}
+          name: MÃºsica para los OÃ­dos ${{ github.ref_name }}
           prerelease: false
           generate_release_notes: true
           files: Musica-para-los-Oidos-${{ github.ref_name }}-arm64-release.apk
@@ -75,5 +75,6 @@ jobs:
             APK Android nativo (release, no debug) compilado desde Kotlin, Jetpack Compose y Media3.
 
             - Firmado con clave release propia.
-            - Optimizado con R8 y reducción de recursos.
+            - Optimizado con R8 y reducciÃ³n de recursos.
             - Reproductor local, ecualizador persistente, control de carpetas, temas personalizados, descargador de audio y letras LRC con auto-scan.
+
