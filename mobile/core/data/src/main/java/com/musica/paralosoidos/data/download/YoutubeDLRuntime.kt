@@ -27,9 +27,12 @@ class YoutubeDLRuntime(context: Context) {
 
     val state: StateFlow<YoutubeDLState> = _state.asStateFlow()
 
-    suspend fun ensureReady() {
+    private var lastUpdateCheckMillis: Long = 0L
+
+    suspend fun ensureReady(forceUpdate: Boolean = false) {
         initializationMutex.withLock {
-            if (_state.value == YoutubeDLState.Ready) return
+            val now = System.currentTimeMillis()
+            if (_state.value == YoutubeDLState.Ready && (!forceUpdate || now - lastUpdateCheckMillis < 60_000L)) return
 
             _state.value = YoutubeDLState.Updating
             try {
@@ -38,14 +41,20 @@ class YoutubeDLRuntime(context: Context) {
                     YoutubeDL.getInstance().init(appContext)
                     val bundledVersion = YoutubeDL.getInstance().versionName(appContext)
                     Log.i(TAG, "Comprobando yt-dlp actualizado; versión registrada=$bundledVersion")
-                    val updateStatus = YoutubeDL.getInstance().updateYoutubeDL(
-                        appContext,
-                        YoutubeDL.UpdateChannel.STABLE
-                    )
-                    Log.i(
-                        TAG,
-                        "yt-dlp listo: status=$updateStatus version=${YoutubeDL.getInstance().versionName(appContext)}"
-                    )
+                    try {
+                        val updateStatus = YoutubeDL.getInstance().updateYoutubeDL(
+                            appContext,
+                            YoutubeDL.UpdateChannel.STABLE
+                        )
+                        lastUpdateCheckMillis = System.currentTimeMillis()
+                        Log.i(
+                            TAG,
+                            "yt-dlp listo: status=$updateStatus version=${YoutubeDL.getInstance().versionName(appContext)}"
+                        )
+                    } catch (updateErr: Exception) {
+                        lastUpdateCheckMillis = System.currentTimeMillis()
+                        Log.w(TAG, "No se pudo actualizar yt-dlp online, usando versión actual=$bundledVersion", updateErr)
+                    }
                 }
                 _state.value = YoutubeDLState.Ready
             } catch (cancelled: CancellationException) {

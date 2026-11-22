@@ -136,9 +136,9 @@ class DownloadQueueManager(
             try {
                 notificationManager.showProgressNotification(task.id, task.title, 0, "")
                 if (youtubeDLRuntime?.state?.value != com.musica.paralosoidos.data.download.YoutubeDLState.Ready) {
-                    updateTask(task.id) { it.copy(status = DownloadTaskStatus.QUEUED, errorMessage = "Preparando motor de descarga...") }
+                    updateTask(task.id) { it.copy(status = DownloadTaskStatus.DOWNLOADING, progress = 0, speed = "Preparando/actualizando motor yt-dlp...") }
                     youtubeDLRuntime?.ensureReady()
-                    updateTask(task.id) { it.copy(status = DownloadTaskStatus.DOWNLOADING, errorMessage = null) }
+                    updateTask(task.id) { it.copy(speed = "") }
                 }
                 val downloadResult = audioDownloadEngine.download(
                     task = task,

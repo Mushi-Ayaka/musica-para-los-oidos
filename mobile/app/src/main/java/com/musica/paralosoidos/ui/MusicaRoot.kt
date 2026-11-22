@@ -19,6 +19,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -268,7 +270,7 @@ fun MusicaRoot(
                 playlistMessage = "Sincronización cancelada."
                 throw cancelled
             } catch (error: Exception) {
-                playlistMessage = "Falló la sincronizaciÃ³n: ${error.localizedMessage ?: "error desconocido"}"
+                playlistMessage = "Falló la sincronización: ${error.localizedMessage ?: "error desconocido"}"
             } finally {
                 trackerSyncProgress = null
                 trackerJob = null
@@ -881,8 +883,13 @@ fun MusicaRoot(
                     }
 
                     item {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("Pistas", "Ãlbumes", "Listas", "Carpetas").forEach { section ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf("Pistas", "Álbumes", "Listas", "Carpetas").forEach { section ->
                                 FilterChip(
                                     selected = librarySubTab == section,
                                     onClick = {
@@ -891,7 +898,7 @@ fun MusicaRoot(
                                             selectedFolderPath = null
                                         }
                                     },
-                                    label = { Text(section) },
+                                    label = { Text(section, maxLines = 1, softWrap = false) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary,
                                         selectedLabelColor = Color.Black
@@ -901,7 +908,7 @@ fun MusicaRoot(
                         }
                     }
 
-                    if (librarySubTab == "Ãlbumes") {
+                    if (librarySubTab == "Álbumes") {
                         if (albums.isEmpty()) {
                             item { Text("No hay álbumes disponibles en la biblioteca.") }
                         } else {
@@ -921,7 +928,7 @@ fun MusicaRoot(
                                         Column(Modifier.weight(1f)) {
                                             Text(albumName, fontWeight = FontWeight.Bold)
                                             Text(
-                                                "${albumTracks.size} pistas Â· ${albumTracks.first().artist}",
+                                                "${albumTracks.size} pistas · ${albumTracks.first().artist}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )

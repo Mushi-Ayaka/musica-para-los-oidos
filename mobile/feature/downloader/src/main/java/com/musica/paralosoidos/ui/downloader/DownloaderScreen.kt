@@ -84,9 +84,7 @@ fun DownloaderScreen(
     val downloadHistory by viewModel.downloadHistory.collectAsStateWithLifecycle()
 
     val canSearch = isOnline && !isServiceBlocked
-    val canDownload = canSearch &&
-        youtubeDLState == YoutubeDLState.Ready &&
-        !settings.outputFolderUri.isNullOrBlank()
+    val canDownload = canSearch && !settings.outputFolderUri.isNullOrBlank()
     val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Column(
@@ -102,13 +100,6 @@ fun DownloaderScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text(
-                    "MUSICA PARA LOS OIDOS",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 1.1.sp
-                )
                 Text(
                     "Descargar",
                     style = MaterialTheme.typography.headlineMedium,
@@ -174,8 +165,8 @@ fun DownloaderScreen(
 
         if (youtubeDLState != YoutubeDLState.Ready) {
             val updateMessage = when (val state = youtubeDLState) {
-                YoutubeDLState.Preparing -> "Preparando yt-dlp..."
-                YoutubeDLState.Updating -> "Actualizando yt-dlp. Las descargas están deshabilitadas hasta que termine."
+                YoutubeDLState.Preparing -> "Preparando motor yt-dlp..."
+                YoutubeDLState.Updating -> "Actualizando motor yt-dlp en segundo plano. Puedes ir buscando y agregando canciones a la cola."
                 YoutubeDLState.Ready -> ""
                 is YoutubeDLState.Failed -> "No se pudo actualizar yt-dlp: ${state.message}"
             }

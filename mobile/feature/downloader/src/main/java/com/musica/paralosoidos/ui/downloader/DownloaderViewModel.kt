@@ -89,11 +89,8 @@ class DownloaderViewModel(
     }
 
     fun checkAndUpdateYoutubeDL() {
-        if (youtubeDLRuntime.state.value != YoutubeDLState.Ready &&
-            youtubeDLRuntime.state.value != YoutubeDLState.Updating) {
-            viewModelScope.launch {
-                runCatching { youtubeDLRuntime.ensureReady() }
-            }
+        viewModelScope.launch {
+            runCatching { youtubeDLRuntime.ensureReady(forceUpdate = true) }
         }
     }
 
@@ -261,10 +258,6 @@ class DownloaderViewModel(
         }
         if (settings.value.outputFolderUri.isNullOrBlank()) {
             _userFeedbackMessage.value = "Elige primero la carpeta donde se guardarán las descargas."
-            return
-        }
-        if (youtubeDLRuntime.state.value != YoutubeDLState.Ready) {
-            _userFeedbackMessage.value = "La descarga está deshabilitada hasta que yt-dlp termine de actualizarse."
             return
         }
 
