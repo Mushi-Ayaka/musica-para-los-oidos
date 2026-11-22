@@ -274,7 +274,7 @@ class AppPreferences(context: Context) {
         dataStore.edit { it[RECENT_PLAYLIST_IDS] = ids.take(3).joinToString(",") }
     }
     val recentPlaylistIds: Flow<List<String>>
-        get() = dataStore.data.map { prefs -> prefs[RECENT_PLAYLIST_IDS]?.split(",") ?: emptyList() }
+        get() = dataStore.data.map { prefs -> prefs[RECENT_PLAYLIST_IDS]?.split(",")?.filter { it.isNotBlank() } ?: emptyList() }
 
     private companion object {
         val THEME_KEY = stringPreferencesKey("theme_settings")

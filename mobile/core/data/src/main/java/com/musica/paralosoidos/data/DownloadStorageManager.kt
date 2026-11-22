@@ -1,6 +1,7 @@
 package com.musica.paralosoidos.data
 
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
@@ -84,6 +85,55 @@ class DownloadStorageManager(
 
     fun getLyricsFile(title: String): File =
         File(lyricsDir, "${sanitizeFileName(title)}.lrc")
+
+    suspend fun saveLyricsFile(title: String, lrcContent: String): File? {
+        val sanitized = sanitizeFileName(title)
+        val fileName = "$sanitized.lrc"
+
+        // 1. Guardar copia local en directorio interno/externo para acceso rápido y directo
+        ensureDirectoriesExist()
+        val localMirrorFile = File(lyricsDir, fileName)
+        runCatching {
+            localMirrorFile.parentFile?.mkdirs()
+            localMirrorFile.writeText(lrcContent, Charsets.UTF_8)
+        }
+
+        // 2. Si el usuario configuró una carpeta SAF, guardar en <Carpeta>/Letra/<fileName>
+        val folderUriStr = downloadSettings.state.first().outputFolderUri
+        if (!folderUriStr.isNullOrBlank()) {
+            try {
+                val folderUri = Uri.parse(folderUriStr)
+                val tree = DocumentFile.fromTreeUri(appContext, folderUri)
+                if (tree != null && tree.canWrite()) {
+                    val letraDirectory = tree.findFile("Letra")
+                        ?: tree.createDirectory("Letra")
+                    if (letraDirectory != null && letraDirectory.canWrite()) {
+                        val existingFile = letraDirectory.findFile(fileName)
+                        val destination = existingFile ?: letraDirectory.createFile("text/plain", fileName)
+                        if (destination != null) {
+                            appContext.contentResolver.openOutputStream(destination.uri, "wt")?.use { output ->
+                                output.bufferedWriter(Charsets.UTF_8).use { it.write(lrcContent) }
+                            }
+                        }
+                        val physicalFile = resolvePrimaryStorageFile(folderUri, "Letra/$fileName")
+                        if (physicalFile != null && physicalFile.exists()) {
+                            MediaScannerConnection.scanFile(
+                                appContext,
+                                arrayOf(physicalFile.absolutePath),
+                                arrayOf("text/plain"),
+                                null
+                            )
+                            return physicalFile
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("DownloadStorageManager", "Error guardando letra en carpeta SAF /Letra/", e)
+            }
+        }
+
+        return if (localMirrorFile.exists() && localMirrorFile.length() > 0) localMirrorFile else null
+    }
 
     private fun uniqueDisplayName(directory: DocumentFile, requestedName: String): String {
         if (directory.findFile(requestedName) == null) return requestedName

@@ -106,94 +106,75 @@ class TrackTrackerManager(
             if (candidate.exists() && candidate.length() > 0) return true
         }
         
-        // Check in user's configured lyrics folder (SAF storage)
-        // Note: We cannot access Flow.value directly here, so we'll skip SAF check in this sync function
-        // For now, we'll rely on the catalog entry which should have the path if LRC was downloaded via SAF
-        
-        // Check in app lyrics storage
+        // 2. Check in app lyrics storage
         val appLrc = storageManager.getLyricsFile(track.title)
         return appLrc.exists() && appLrc.length() > 0
     }
 
-    suspend fun downloadAndSaveLrc(track: TrackEntity, lrcContent: String): File? = withContext(Dispatchers.IO) {
+    suspend fun fetchLyricsWithUrl(track: TrackEntity): com.musica.paralosoidos.data.lyrics.LyricsFetchResult? = withContext(Dispatchers.IO) {
+        val clean = MetadataCleaner.clean(track.title, track.artist)
+        val durationSec = (track.durationMs / 1000).toInt()
         try {
-            // 1. Intentar usar el directorio configurado por el usuario (SAF)
-            val lyricsFolderUri = preferences.lyricsFolderUri.first()
-            if (!lyricsFolderUri.isNullOrBlank()) {
-                val success = saveLrcToUserFolder(track, lrcContent, lyricsFolderUri)
-                if (success) {
-                    // Para SAF, guardamos la URI en el catálogo
-                    val safPath = "saf:$lyricsFolderUri/${sanitizeFileName(track.title)}.lrc"
-                    updateCatalogWithLrcPath(track, safPath)
-                    // Retornar un archivo de referencia simbólico
-                    return@withContext File(safPath)
-                }
-            }
-            
-            // 2. Fallback: si no hay directorio configurado o falla, usar directorio junto al audio
-            val destFile = if (track.folderPath.isNotBlank()) {
+            lyricsEngine.fetchLyricsDetailed(clean.title, clean.artist, durationSec)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun downloadAndSaveLrc(
+        track: TrackEntity,
+        lrcContent: String,
+        lrclibUrl: String? = null
+    ): File? = withContext(Dispatchers.IO) {
+        try {
+            // 1. Guardar en la carpeta SAF de descargas (/Letra/) y espejo local
+            val savedFile = storageManager.saveLyricsFile(track.title, lrcContent)
+
+            // 2. Si la pista está en una carpeta local, intentar también guardar archivo al lado
+            if (track.folderPath.isNotBlank()) {
                 val nameWithoutExt = track.displayName.substringBeforeLast('.')
-                File(track.folderPath, "$nameWithoutExt.lrc")
-            } else {
-                // 3. Último fallback: directorio de la app
-                storageManager.getLyricsFile(track.title)
+                val sidecar = File(track.folderPath, "$nameWithoutExt.lrc")
+                runCatching { lyricsEngine.writeLrcFile(sidecar, lrcContent) }
             }
-            
-            lyricsEngine.writeLrcFile(destFile, lrcContent)
-            updateCatalogWithLrcPath(track, destFile.absolutePath)
-            destFile
+
+            val finalFile = savedFile ?: if (track.folderPath.isNotBlank()) {
+                val sidecar = File(track.folderPath, "${track.displayName.substringBeforeLast('.')}.lrc")
+                if (sidecar.exists() && sidecar.length() > 0) sidecar else null
+            } else null
+
+            if (finalFile != null) {
+                updateCatalogWithLrcPath(track, finalFile.absolutePath, lrclibUrl)
+            }
+            finalFile
         } catch (_: Exception) {
             null
         }
     }
     
-    private suspend fun saveLrcToUserFolder(
-        track: TrackEntity, 
-        lrcContent: String, 
-        folderUri: String
-    ): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val contentResolver = context.contentResolver
-            val treeUri = android.net.Uri.parse(folderUri)
-            val documentId = android.provider.DocumentsContract.getTreeDocumentId(treeUri)
-            val documentUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(
-                treeUri, 
-                documentId
-            )
-            
-            // Crear archivo en el directorio SAF
-            val fileName = "${sanitizeFileName(track.title)}.lrc"
-            val outputUri = android.provider.DocumentsContract.createDocument(
-                contentResolver,
-                documentUri,
-                "text/plain",
-                fileName
-            ) ?: return@withContext false
-            
-            // Escribir contenido
-            contentResolver.openOutputStream(outputUri)?.use { outputStream ->
-                outputStream.bufferedWriter().use { writer ->
-                    writer.write(lrcContent)
-                }
-            }
-            true
-        } catch (e: Exception) {
-            android.util.Log.e("TrackTrackerManager", "Error guardando LRC en directorio SAF: ${e.message}")
-            false
-        }
-    }
-    
-    private fun sanitizeFileName(title: String): String {
-        return title.replace(Regex("""[<>:"/\\|?*]"""), "_")
-            .replace(Regex("""\s+"""), "_")
-            .trim('_')
-    }
-    
-    private suspend fun updateCatalogWithLrcPath(track: TrackEntity, absolutePath: String) {
+    private suspend fun updateCatalogWithLrcPath(
+        track: TrackEntity,
+        absolutePath: String,
+        lrclibUrl: String? = null
+    ) {
         val existing = catalogTrackDao.observeAll().first().firstOrNull { it.localUri == track.uri }
         if (existing != null) {
-            catalogTrackDao.upsert(existing.copy(lrcPath = absolutePath, lrcSynced = true))
+            val metaMap = runCatching {
+                org.json.JSONObject(existing.metadataJson)
+            }.getOrDefault(org.json.JSONObject())
+            if (!lrclibUrl.isNullOrBlank()) {
+                metaMap.put("lrclibUrl", lrclibUrl)
+            }
+            catalogTrackDao.upsert(
+                existing.copy(
+                    lrcPath = absolutePath,
+                    lrcSynced = true,
+                    metadataJson = metaMap.toString()
+                )
+            )
         } else {
+            val metaJson = org.json.JSONObject().apply {
+                if (!lrclibUrl.isNullOrBlank()) put("lrclibUrl", lrclibUrl)
+            }.toString()
             catalogTrackDao.upsert(
                 CatalogTrackEntity(
                     id = "local-${track.id}",
@@ -203,7 +184,7 @@ class TrackTrackerManager(
                     durationMs = track.durationMs,
                     youtubeUrl = null,
                     localUri = track.uri,
-                    metadataJson = "{}",
+                    metadataJson = metaJson,
                     lrcPath = absolutePath,
                     lrcSynced = true
                 )

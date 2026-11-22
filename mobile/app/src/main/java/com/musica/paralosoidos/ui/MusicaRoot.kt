@@ -202,6 +202,10 @@ fun MusicaRoot(
         initialValue = emptyList(),
         lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     )
+    val recentPlaylistIds by container.preferences.recentPlaylistIds.collectAsStateWithLifecycle(
+        initialValue = emptyList(),
+        lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    )
 
     val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container.libraryRepository))
     val nowPlaying by playbackViewModel.nowPlaying.collectAsStateWithLifecycle()
@@ -469,6 +473,7 @@ fun MusicaRoot(
         initialValue = AudioOutputProfileIds.STUDIO_MONITOR
     )
     val tracksByIdLong = remember(tracks) { tracks.associateBy { it.id } }
+    val playlistsById = remember(playlists) { playlists.associateBy { it.id } }
     val audioGranted = hasAudioPermission()
 
     LaunchedEffect(customEqPresets) {
@@ -728,6 +733,10 @@ fun MusicaRoot(
                         }
                     }
 
+                    // 1. Pistas Recientes (hasta 3)
+                    val recentTracks = recentTrackIds.mapNotNull { id -> tracksByIdLong[id] }
+                    val displayTracks = if (recentTracks.isNotEmpty()) recentTracks.take(3) else tracks.take(3)
+
                     item {
                         Text(
                             "Pistas Recientes",
@@ -737,11 +746,7 @@ fun MusicaRoot(
                         )
                     }
 
-                    // Calcular pistas recientes directamente
-                    val tracksById = tracks.associateBy { it.id }
-                    val recentTracks = recentTrackIds.mapNotNull { id -> tracksById[id] }
-
-                    if (recentTracks.isEmpty() && tracks.isEmpty()) {
+                    if (tracks.isEmpty()) {
                         item {
                             EmptyLibrary(
                                 hasPermission = hasAudioPermission(),
@@ -752,8 +757,8 @@ fun MusicaRoot(
                                 }
                             )
                         }
-                    } else if (recentTracks.isNotEmpty()) {
-                        items(recentTracks, key = { "recent-${it.id}" }) { track ->
+                    } else {
+                        items(displayTracks, key = { "home-track-${it.id}" }) { track ->
                             val cat = catalogMap[track.uri]
                             val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
                             TrackRow(
@@ -764,17 +769,38 @@ fun MusicaRoot(
                                 onTrackerClick = { selectedTrackForLinks = track }
                             )
                         }
-                    } else {
-                        // Mostrar primeras pistas de la biblioteca si no hay recientes
-                        items(tracks.take(6), key = { "home-${it.id}" }) { track ->
-                            val cat = catalogMap[track.uri]
-                            val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
-                            TrackRow(
-                                track = track,
-                                onClick = { playTrackAndUpdateRecent(track, tracks) },
-                                isLinked = isLinked,
-                                trackerColor = trackerCircleColor,
-                                onTrackerClick = { selectedTrackForLinks = track }
+                    }
+
+                    // 2. Listas de Reproducción Recientes (hasta 3)
+                    val recentPlaylists = recentPlaylistIds.mapNotNull { id -> playlistsById[id] }
+                    val displayPlaylists = if (recentPlaylists.isNotEmpty()) recentPlaylists.take(3) else playlists.take(3)
+
+                    if (displayPlaylists.isNotEmpty()) {
+                        item {
+                            Text(
+                                "Listas Recientes",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+                            )
+                        }
+
+                        items(displayPlaylists, key = { "home-playlist-${it.id}" }) { playlist ->
+                            PlaylistGalleryCard(
+                                playlist = playlist,
+                                allTracksById = tracksByIdLong,
+                                onClick = {
+                                    selectedPlaylistId = playlist.id
+                                    libraryViewModel.setLibrarySubTab("Listas")
+                                    selectedTabName = AppTab.Library.name
+                                    updateRecentPlaylists(playlist.id)
+                                },
+                                onPlay = { plTracks ->
+                                    if (plTracks.isNotEmpty()) {
+                                        playTrackAndUpdateRecent(plTracks.first(), plTracks)
+                                        updateRecentPlaylists(playlist.id)
+                                    }
+                                }
                             )
                         }
                     }
@@ -1652,6 +1678,20 @@ fun MusicaRoot(
                 showPlayer = false
                 selectedTabName = AppTab.Settings.name
             },
+            onLinkLrcFromLrclib = { trackToLink ->
+                val fetchResult = container.trackTrackerManager.fetchLyricsWithUrl(trackToLink)
+                val lyrics = fetchResult?.syncedLyrics ?: fetchResult?.plainLyrics
+                if (!lyrics.isNullOrBlank()) {
+                    val savedFile = container.trackTrackerManager.downloadAndSaveLrc(
+                        track = trackToLink,
+                        lrcContent = lyrics,
+                        lrclibUrl = fetchResult?.lrclibUrl
+                    )
+                    savedFile != null
+                } else {
+                    false
+                }
+            },
             onClose = { showPlayer = false }
         )
         }
@@ -1754,9 +1794,9 @@ fun MusicaRoot(
             catalogEntry = catalogEntry,
             sheetState = linksSheetState,
             onDismiss = { selectedTrackForLinks = null },
-            onSave = { ytUrl, lrcPath, lrcSynced ->
+            onSave = { ytUrl, lrcPath, lrcSynced, lrclibUrl ->
                 coroutineScope.launch {
-                    container.saveTrackLinks(currentTrack, ytUrl, lrcPath, lrcSynced)
+                    container.saveTrackLinks(currentTrack, ytUrl, lrcPath, lrcSynced, lrclibUrl)
                 }
             },
             onAutoSearchYouTube = {
@@ -1765,15 +1805,15 @@ fun MusicaRoot(
                     allowSuspiciousTitle = true
                 )
             },
-            onAutoSearchLrc = {
-                container.trackTrackerManager.searchLrcMatch(currentTrack)
+            onAutoSearchLrcDetailed = {
+                container.trackTrackerManager.fetchLyricsWithUrl(currentTrack)
             },
-            onDownloadLrc = { lrcContent ->
-                container.trackTrackerManager.downloadAndSaveLrc(currentTrack, lrcContent) != null
+            onDownloadLrc = { lrcContent, lrclibUrl ->
+                container.trackTrackerManager.downloadAndSaveLrc(currentTrack, lrcContent, lrclibUrl) != null
             },
             onUnlink = {
                 coroutineScope.launch {
-                    container.saveTrackLinks(currentTrack, null, null, false)
+                    container.saveTrackLinks(currentTrack, null, null, false, null)
                 }
             }
         )

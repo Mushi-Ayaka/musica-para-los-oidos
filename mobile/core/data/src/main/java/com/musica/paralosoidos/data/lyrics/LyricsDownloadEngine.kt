@@ -9,22 +9,34 @@ import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
 
+data class LyricsFetchResult(
+    val syncedLyrics: String?,
+    val plainLyrics: String?,
+    val lrclibUrl: String?
+)
+
 class LyricsDownloadEngine(private val okHttpClient: OkHttpClient) {
 
     fun fetchLyrics(title: String, channel: String, durationSeconds: Int): String? {
+        return fetchLyricsDetailed(title, channel, durationSeconds)?.syncedLyrics
+    }
+
+    fun fetchLyricsDetailed(title: String, channel: String, durationSeconds: Int): LyricsFetchResult? {
         val cleanMeta = MetadataCleaner.clean(title, channel)
         val cleanTitle = cleanMeta.title
         val cleanArtist = cleanMeta.artist
 
         // Attempt 1: Exact match via /api/get
-        val exactLyrics = tryFetchExact(cleanTitle, cleanArtist, durationSeconds)
-        if (!exactLyrics.isNullOrBlank()) return exactLyrics
+        val exactResult = tryFetchExact(cleanTitle, cleanArtist, durationSeconds)
+        if (exactResult != null && (!exactResult.syncedLyrics.isNullOrBlank() || !exactResult.plainLyrics.isNullOrBlank())) {
+            return exactResult
+        }
 
         // Attempt 2: Search query via /api/search
         return trySearchLyrics(cleanTitle, cleanArtist)
     }
 
-    private fun tryFetchExact(title: String, artist: String, durationSeconds: Int): String? {
+    private fun tryFetchExact(title: String, artist: String, durationSeconds: Int): LyricsFetchResult? {
         return try {
             val encodedTitle = URLEncoder.encode(title, "UTF-8")
             val encodedArtist = URLEncoder.encode(artist, "UTF-8")
@@ -32,7 +44,7 @@ class LyricsDownloadEngine(private val okHttpClient: OkHttpClient) {
             val url = "https://lrclib.net/api/get?track_name=$encodedTitle&artist_name=$encodedArtist$durationParam"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "MusicaParaLosOidos/1.3.0 (Android; https://github.com/Mushi-Ayaka)")
+                .header("User-Agent", "MusicaParaLosOidos/1.4.6 (Android; https://github.com/Mushi-Ayaka)")
                 .get()
                 .build()
 
@@ -40,21 +52,24 @@ class LyricsDownloadEngine(private val okHttpClient: OkHttpClient) {
             if (!response.isSuccessful) return null
             val body = response.body?.string() ?: return null
             val json = JSONObject(body)
-            val synced = json.optString("syncedLyrics", "")
-            synced.ifBlank { null }
+            val synced = json.optString("syncedLyrics", "").ifBlank { null }
+            val plain = json.optString("plainLyrics", "").ifBlank { null }
+            val id = json.optLong("id", 0L)
+            val lrclibUrl = if (id > 0) "https://lrclib.net/api/get/$id" else url
+            LyricsFetchResult(synced, plain, lrclibUrl)
         } catch (e: Exception) {
             null
         }
     }
 
-    private fun trySearchLyrics(title: String, artist: String): String? {
+    private fun trySearchLyrics(title: String, artist: String): LyricsFetchResult? {
         return try {
             val query = if (artist.isNotBlank() && artist != "Desconocido") "$artist $title" else title
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val url = "https://lrclib.net/api/search?q=$encodedQuery"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "MusicaParaLosOidos/1.3.0 (Android; https://github.com/Mushi-Ayaka)")
+                .header("User-Agent", "MusicaParaLosOidos/1.4.6 (Android; https://github.com/Mushi-Ayaka)")
                 .get()
                 .build()
 
@@ -64,9 +79,12 @@ class LyricsDownloadEngine(private val okHttpClient: OkHttpClient) {
             val array = JSONArray(body)
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
-                val synced = item.optString("syncedLyrics", "")
-                if (synced.isNotBlank()) {
-                    return synced
+                val synced = item.optString("syncedLyrics", "").ifBlank { null }
+                val plain = item.optString("plainLyrics", "").ifBlank { null }
+                if (synced != null || plain != null) {
+                    val id = item.optLong("id", 0L)
+                    val lrclibUrl = if (id > 0) "https://lrclib.net/api/get/$id" else "https://lrclib.net/api/search?q=$encodedQuery"
+                    return LyricsFetchResult(synced, plain, lrclibUrl)
                 }
             }
             null

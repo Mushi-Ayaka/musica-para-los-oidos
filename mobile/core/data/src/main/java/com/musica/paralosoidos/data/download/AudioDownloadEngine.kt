@@ -101,9 +101,8 @@ class AudioDownloadEngine(
         val lyricsContent = runCatching { lyricsDeferred.await() }.getOrNull()
         var lrcSaved = false
         if (!lyricsContent.isNullOrBlank()) {
-            val lrcFile = storageManager.getLyricsFile(task.title)
-            lyricsEngine.writeLrcFile(lrcFile, lyricsContent)
-            lrcSaved = lrcFile.exists() && lrcFile.length() > 0
+            val lrcFile = storageManager.saveLyricsFile(task.title, lyricsContent)
+            lrcSaved = lrcFile != null && lrcFile.exists() && lrcFile.length() > 0
         }
 
         AudioDownloadResult(

@@ -67,10 +67,10 @@ fun TrackLinksBottomSheet(
     catalogEntry: CatalogTrackEntity?,
     sheetState: SheetState,
     onDismiss: () -> Unit,
-    onSave: (youtubeUrl: String?, lrcPath: String?, lrcSynced: Boolean) -> Unit,
+    onSave: (youtubeUrl: String?, lrcPath: String?, lrcSynced: Boolean, lrclibUrl: String?) -> Unit,
     onAutoSearchYouTube: suspend () -> DownloadSearchResult?,
-    onAutoSearchLrc: suspend () -> String?,
-    onDownloadLrc: suspend (String) -> Boolean,
+    onAutoSearchLrcDetailed: suspend () -> com.musica.paralosoidos.data.lyrics.LyricsFetchResult?,
+    onDownloadLrc: suspend (String, String?) -> Boolean,
     onUnlink: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -79,6 +79,14 @@ fun TrackLinksBottomSheet(
     var ytUrl by remember(catalogEntry) { mutableStateOf(catalogEntry?.youtubeUrl.orEmpty()) }
     var lrcPath by remember(catalogEntry) { mutableStateOf(catalogEntry?.lrcPath.orEmpty()) }
     var isLrcSynced by remember(catalogEntry) { mutableStateOf(catalogEntry?.lrcSynced ?: false) }
+    val initialLrclibUrl = remember(catalogEntry) {
+        catalogEntry?.metadataJson?.let { jsonStr ->
+            runCatching {
+                org.json.JSONObject(jsonStr).optString("lrclibUrl", "")
+            }.getOrNull()
+        }.orEmpty()
+    }
+    var lrclibUrl by remember(catalogEntry) { mutableStateOf(initialLrclibUrl) }
 
     var isSearchingYt by remember { mutableStateOf(false) }
     var isSearchingLrc by remember { mutableStateOf(false) }
@@ -218,7 +226,7 @@ fun TrackLinksBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Card 2: LRC Tracker — NUEVO DISEÑO
+            // Card 2: LRC Tracker
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -237,7 +245,7 @@ fun TrackLinksBottomSheet(
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleSmall
                         )
-                        val hasLrcLinked = isLrcSynced || lrcPath.isNotBlank()
+                        val hasLrcLinked = isLrcSynced || lrcPath.isNotBlank() || lrclibUrl.isNotBlank()
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
@@ -256,26 +264,55 @@ fun TrackLinksBottomSheet(
                             )
                         }
                     }
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    // Boton unico: buscar + descargar + vincular atomicamente
+
+                    OutlinedTextField(
+                        value = lrclibUrl,
+                        onValueChange = {
+                            lrclibUrl = it
+                            if (it.isNotBlank()) isLrcSynced = true
+                        },
+                        label = { Text("Enlace o ID de LRCLIB") },
+                        placeholder = { Text("https://lrclib.net/api/get/...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (lrcPath.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Archivo local: $lrcPath",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Button(
                         onClick = {
                             scope.launch {
                                 isSearchingLrc = true
                                 statusMessage = null
                                 try {
-                                    val lyrics = onAutoSearchLrc()
-                                    if (!lyrics.isNullOrBlank()) {
-                                        val ok = onDownloadLrc(lyrics)
+                                    val result = onAutoSearchLrcDetailed()
+                                    val lyrics = result?.syncedLyrics ?: result?.plainLyrics
+                                    if (result != null && !lyrics.isNullOrBlank()) {
+                                        val ok = onDownloadLrc(lyrics, result.lrclibUrl)
                                         if (ok) {
                                             isLrcSynced = true
-                                            lrcPath = "vinculado"
-                                            statusMessage = "Letra descargada y vinculada correctamente."
+                                            if (!result.lrclibUrl.isNullOrBlank()) {
+                                                lrclibUrl = result.lrclibUrl ?: ""
+                                            }
+                                            statusMessage = "Letra descargada y vinculada a LRCLIB."
                                         } else {
-                                            statusMessage = "Se encontro letra pero no se pudo guardar el archivo."
+                                            statusMessage = "Se encontró letra pero no se pudo guardar el archivo."
                                         }
                                     } else {
-                                        statusMessage = "No se encontro letra en LRCLIB para esta pista."
+                                        statusMessage = "No se encontró letra en LRCLIB para esta pista."
                                     }
                                 } catch (cancelled: CancellationException) {
                                     throw cancelled
@@ -296,8 +333,8 @@ fun TrackLinksBottomSheet(
                         } else {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            val hasLrc = isLrcSynced || lrcPath.isNotBlank()
-                            Text(if (hasLrc) "Actualizar letra de LRCLIB" else "Descargar letra de LRCLIB")
+                            val hasLrc = isLrcSynced || lrcPath.isNotBlank() || lrclibUrl.isNotBlank()
+                            Text(if (hasLrc) "Actualizar letra de LRCLIB" else "Vincular y descargar de LRCLIB")
                         }
                     }
                 }
@@ -337,7 +374,8 @@ fun TrackLinksBottomSheet(
                         onSave(
                             ytUrl.trim().takeIf(String::isNotBlank),
                             lrcPath.trim().takeIf(String::isNotBlank),
-                            isLrcSynced
+                            isLrcSynced,
+                            lrclibUrl.trim().takeIf(String::isNotBlank)
                         )
                         onDismiss()
                     },

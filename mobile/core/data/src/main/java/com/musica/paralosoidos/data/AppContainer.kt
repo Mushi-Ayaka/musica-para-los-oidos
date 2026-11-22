@@ -458,15 +458,31 @@ class AppContainer(context: Context) {
         }
     }
 
-    suspend fun saveTrackLinks(track: TrackEntity, youtubeUrl: String?, lrcPath: String?, lrcSynced: Boolean) {
+    suspend fun saveTrackLinks(
+        track: TrackEntity,
+        youtubeUrl: String?,
+        lrcPath: String?,
+        lrcSynced: Boolean,
+        lrclibUrl: String? = null
+    ) {
         val cleanUrl = youtubeUrl?.trim()?.takeIf(String::isNotBlank)
         val cleanLrc = lrcPath?.trim()?.takeIf(String::isNotBlank)
+        val cleanLrclib = lrclibUrl?.trim()?.takeIf(String::isNotBlank)
         val existing = catalogTracks.observeAll().first().firstOrNull { it.localUri == track.uri }
         if (existing != null) {
+            val metaMap = runCatching {
+                Json.parseToJsonElement(existing.metadataJson).jsonObject.toMutableMap()
+            }.getOrDefault(mutableMapOf())
+            if (cleanLrclib != null) {
+                metaMap["lrclibUrl"] = JsonPrimitive(cleanLrclib)
+            } else if (cleanLrc == null) {
+                metaMap.remove("lrclibUrl")
+            }
             val updated = existing.copy(
                 youtubeUrl = cleanUrl,
                 lrcPath = cleanLrc,
-                lrcSynced = lrcSynced
+                lrcSynced = lrcSynced,
+                metadataJson = JsonObject(metaMap).toString()
             )
             catalogTracks.upsert(updated)
         } else {
@@ -488,6 +504,9 @@ class AppContainer(context: Context) {
                     put("youtubeUrl", cleanUrl.orEmpty())
                     put("lrcPath", cleanLrc.orEmpty())
                     put("lrcSynced", lrcSynced)
+                    if (cleanLrclib != null) {
+                        put("lrclibUrl", cleanLrclib)
+                    }
                     put("ytAttempted", true)
                 }.toString()
             )
