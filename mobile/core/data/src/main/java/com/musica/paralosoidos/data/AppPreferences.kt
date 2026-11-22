@@ -18,6 +18,7 @@ import kotlinx.serialization.json.Json
 private val Context.appPreferencesDataStore by preferencesDataStore(name = "app_preferences")
 
 class AppPreferences(context: Context) {
+    private val appContext = context.applicationContext
     private val dataStore = context.applicationContext.appPreferencesDataStore
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -276,6 +277,40 @@ class AppPreferences(context: Context) {
     val recentPlaylistIds: Flow<List<String>>
         get() = dataStore.data.map { prefs -> prefs[RECENT_PLAYLIST_IDS]?.split(",")?.filter { it.isNotBlank() } ?: emptyList() }
 
+    suspend fun recordTrackPlayed(trackId: Long) {
+        dataStore.edit { prefs ->
+            val raw = prefs[TRACK_PLAY_COUNTS_KEY] ?: "{}"
+            val counts = runCatching {
+                json.decodeFromString<Map<String, Int>>(raw).toMutableMap()
+            }.getOrDefault(mutableMapOf())
+            val key = trackId.toString()
+            counts[key] = (counts[key] ?: 0) + 1
+            prefs[TRACK_PLAY_COUNTS_KEY] = json.encodeToString(counts)
+        }
+    }
+
+    val trackPlayCounts: Flow<Map<Long, Int>>
+        get() = dataStore.data.map { prefs ->
+            val raw = prefs[TRACK_PLAY_COUNTS_KEY] ?: "{}"
+            runCatching {
+                json.decodeFromString<Map<String, Int>>(raw).mapKeys { it.key.toLong() }
+            }.getOrDefault(emptyMap())
+        }
+
+    suspend fun saveCrossfadeSeconds(seconds: Int) {
+        val clamped = seconds.coerceIn(0, 15)
+        runCatching {
+            appContext.getSharedPreferences("playback_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putInt("crossfade_seconds", clamped)
+                .apply()
+        }
+        dataStore.edit { it[CROSSFADE_SECONDS_KEY] = clamped }
+    }
+
+    val crossfadeSeconds: Flow<Int>
+        get() = dataStore.data.map { prefs -> prefs[CROSSFADE_SECONDS_KEY] ?: 0 }
+
     private companion object {
         val THEME_KEY = stringPreferencesKey("theme_settings")
         val EQ_PRESETS_KEY = stringPreferencesKey("custom_eq_presets")
@@ -300,6 +335,8 @@ class AppPreferences(context: Context) {
         val AUTO_BACKUP_INTERVAL_KEY = stringPreferencesKey("auto_backup_interval")
         val RECENT_TRACK_IDS = stringPreferencesKey("recent_track_ids")
         val RECENT_PLAYLIST_IDS = stringPreferencesKey("recent_playlist_ids")
+        val TRACK_PLAY_COUNTS_KEY = stringPreferencesKey("track_play_counts")
+        val CROSSFADE_SECONDS_KEY = intPreferencesKey("crossfade_seconds")
         val HEX_COLOR_PATTERN = Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
         val SUPPORTED_FONT_FAMILIES = setOf("jakarta", "system", "serif", "mono")
     }

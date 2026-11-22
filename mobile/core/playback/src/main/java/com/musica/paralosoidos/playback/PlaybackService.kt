@@ -20,6 +20,17 @@ class PlaybackService : MediaSessionService() {
     private lateinit var stateStore: PlaybackStateStore
 
     private val handler = Handler(Looper.getMainLooper())
+    private var isFadingIn = false
+    private val crossfadeRunnable = object : Runnable {
+        override fun run() {
+            val player = exoPlayer
+            if (player?.isPlaying == true) {
+                applyCrossfadeTick(player)
+            }
+            handler.postDelayed(this, 250L)
+        }
+    }
+
     private val persistRunnable = object : Runnable {
         override fun run() {
             if (exoPlayer?.isPlaying == true) {
@@ -31,6 +42,9 @@ class PlaybackService : MediaSessionService() {
 
     private val persistenceListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
+            if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                applyTransitionFadeIn()
+            }
             if (events.contains(Player.EVENT_TIMELINE_CHANGED) ||
                 events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
                 events.contains(Player.EVENT_POSITION_DISCONTINUITY) ||
@@ -68,6 +82,7 @@ class PlaybackService : MediaSessionService() {
             .apply { createSessionActivity()?.let { setSessionActivity(it) } }
             .build()
         handler.postDelayed(persistRunnable, PERSIST_INTERVAL_MS)
+        handler.postDelayed(crossfadeRunnable, 250L)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
@@ -164,6 +179,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         handler.removeCallbacks(persistRunnable)
+        handler.removeCallbacks(crossfadeRunnable)
         persistState(synchronous = true)
         AudioEffectsManager.release()
         mediaSession?.release()
@@ -171,6 +187,62 @@ class PlaybackService : MediaSessionService() {
         mediaSession = null
         exoPlayer = null
         super.onDestroy()
+    }
+
+
+    private fun applyCrossfadeTick(player: ExoPlayer) {
+        if (isFadingIn) return
+        val prefs = getSharedPreferences("playback_prefs", android.content.Context.MODE_PRIVATE)
+        val crossfadeSec = prefs.getInt("crossfade_seconds", 0)
+        if (crossfadeSec <= 0) {
+            if (player.volume < 1f) player.volume = 1f
+            return
+        }
+        val duration = player.duration
+        val position = player.currentPosition
+        if (duration <= 0L || position < 0L) return
+        val remainingMs = duration - position
+        val fadeMs = crossfadeSec * 1000L
+        if (remainingMs in 0..fadeMs && (player.hasNextMediaItem() || player.repeatMode != Player.REPEAT_MODE_OFF)) {
+            val factor = (remainingMs.toFloat() / fadeMs).coerceIn(0.05f, 1f)
+            player.volume = factor
+        } else if (player.volume < 1f) {
+            player.volume = 1f
+        }
+    }
+
+    private fun applyTransitionFadeIn() {
+        val player = exoPlayer ?: return
+        val prefs = getSharedPreferences("playback_prefs", android.content.Context.MODE_PRIVATE)
+        val crossfadeSec = prefs.getInt("crossfade_seconds", 0)
+        if (crossfadeSec <= 0) {
+            player.volume = 1f
+            return
+        }
+        val fadeMs = crossfadeSec * 1000L
+        val startTime = System.currentTimeMillis()
+        isFadingIn = true
+        player.volume = 0.05f
+
+        val fadeInRunnable = object : Runnable {
+            override fun run() {
+                val elapsed = System.currentTimeMillis() - startTime
+                val factor = (elapsed.toFloat() / fadeMs).coerceIn(0.05f, 1f)
+                val p = exoPlayer
+                if (p != null) {
+                    p.volume = factor
+                    if (elapsed < fadeMs && p.isPlaying) {
+                        handler.postDelayed(this, 50L)
+                    } else {
+                        p.volume = 1f
+                        isFadingIn = false
+                    }
+                } else {
+                    isFadingIn = false
+                }
+            }
+        }
+        handler.post(fadeInRunnable)
     }
 
     private companion object {

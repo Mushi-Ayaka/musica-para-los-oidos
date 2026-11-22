@@ -31,6 +31,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -263,20 +264,70 @@ fun ThemeSettingsScreen(
         }
 
         if (settings.customPresets.isNotEmpty()) {
+            var themeToDelete by remember { mutableStateOf<SavedThemePreset?>(null) }
+
+            if (themeToDelete != null) {
+                AlertDialog(
+                    onDismissRequest = { themeToDelete = null },
+                    title = { Text("Eliminar tema") },
+                    text = { Text("¿Deseas eliminar el tema '${themeToDelete?.name}'?") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val toRemove = themeToDelete
+                                themeToDelete = null
+                                if (toRemove != null) {
+                                    val updated = settings.customPresets.filterNot { it.id == toRemove.id }
+                                    onSettingsChange(settings.copy(customPresets = updated))
+                                }
+                            }
+                        ) { Text("Eliminar") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { themeToDelete = null }) { Text("Cancelar") }
+                    }
+                )
+            }
+
             SettingsCard(
                 title = "Tus temas",
                 subtitle = "Combinaciones guardadas para volver a usarlas."
             ) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(settings.customPresets, key = { it.id }) { preset ->
-                        OutlinedButton(
-                            onClick = {
-                                onSettingsChange(
-                                    preset.settings.copy(customPresets = settings.customPresets)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(MusicaStyle.Shape.row)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MusicaStyle.Shape.row)
+                                .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
+                        ) {
+                            Text(
+                                preset.name,
+                                modifier = Modifier
+                                    .clickable {
+                                        onSettingsChange(
+                                            preset.settings.copy(customPresets = settings.customPresets)
+                                        )
+                                    }
+                                    .padding(vertical = 6.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            IconButton(
+                                onClick = { themeToDelete = preset },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Eliminar tema",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        ) {
-                            Text(preset.name, maxLines = 1)
                         }
                     }
                 }

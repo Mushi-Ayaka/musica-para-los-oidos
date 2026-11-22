@@ -80,7 +80,8 @@ class CentralBackupManager(
                         uri = it.uri,
                         displayName = it.displayName
                     )
-                }
+                },
+                coverUri = pl.coverUri
             )
         }
 
@@ -166,7 +167,8 @@ class CentralBackupManager(
                 name = name,
                 trackIds = saved.tracks.mapNotNull { t ->
                     localTracks.firstOrNull { it.uri == t.uri || it.title.equals(t.title, ignoreCase = true) }?.id
-                }.distinct()
+                }.distinct(),
+                coverUri = saved.coverUri
             )
         }
         val currentPlaylists = preferences.playlists.first()
@@ -299,4 +301,166 @@ class CentralBackupManager(
             )
         }
     }
+
+    suspend fun exportZipBundle(
+        outputStream: java.io.OutputStream,
+        currentPlayback: PlaybackBackupState? = null
+    ) = withContext(Dispatchers.IO) {
+        val jsonString = exportBundle(currentPlayback)
+        val zipOut = java.util.zip.ZipOutputStream(outputStream)
+
+        // 1. backup.json
+        val jsonEntry = java.util.zip.ZipEntry("backup.json")
+        zipOut.putNextEntry(jsonEntry)
+        zipOut.write(jsonString.toByteArray(Charsets.UTF_8))
+        zipOut.closeEntry()
+
+        // 2. Wallpapers
+        val theme = preferences.themeSettings.first()
+        val allWallpapers = mutableSetOf<String>()
+        if (theme.wallpaperUri.isNotBlank()) allWallpapers.add(theme.wallpaperUri)
+        theme.customPresets.forEach {
+            if (it.settings.wallpaperUri.isNotBlank()) allWallpapers.add(it.settings.wallpaperUri)
+        }
+        for (wUri in allWallpapers) {
+            val fPath = if (wUri.startsWith("file://")) wUri.removePrefix("file://") else wUri
+            val file = File(fPath)
+            if (file.exists() && file.isFile) {
+                val entry = java.util.zip.ZipEntry("wallpapers/${file.name}")
+                zipOut.putNextEntry(entry)
+                file.inputStream().use { it.copyTo(zipOut) }
+                zipOut.closeEntry()
+            }
+        }
+
+        // 3. Playlist covers
+        val playlists = preferences.playlists.first()
+        for (pl in playlists) {
+            val cUri = pl.coverUri
+            if (!cUri.isNullOrBlank()) {
+                val fPath = if (cUri.startsWith("file://")) cUri.removePrefix("file://") else cUri
+                val file = File(fPath)
+                if (file.exists() && file.isFile) {
+                    val entry = java.util.zip.ZipEntry("playlist_covers/${file.name}")
+                    zipOut.putNextEntry(entry)
+                    file.inputStream().use { it.copyTo(zipOut) }
+                    zipOut.closeEntry()
+                }
+            }
+        }
+
+        zipOut.finish()
+    }
+
+    suspend fun importBundleStream(inputStream: java.io.InputStream): CentralBackupImportResult = withContext(Dispatchers.IO) {
+        val buffered = if (inputStream.markSupported()) inputStream else java.io.BufferedInputStream(inputStream)
+        buffered.mark(4)
+        val header = ByteArray(4)
+        val readBytes = buffered.read(header)
+        buffered.reset()
+
+        val isZip = readBytes == 4 && header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() && header[2] == 0x03.toByte() && header[3] == 0x04.toByte()
+
+        if (isZip) {
+            val zipIn = java.util.zip.ZipInputStream(buffered)
+            var jsonContent: String? = null
+            val coversDir = File(context.filesDir, "playlist_covers").apply { mkdirs() }
+
+            var entry = zipIn.nextEntry
+            while (entry != null) {
+                val name = entry.name
+                if (name == "backup.json") {
+                    jsonContent = zipIn.bufferedReader(Charsets.UTF_8).readText()
+                } else if (name.startsWith("wallpapers/")) {
+                    val fName = name.substringAfterLast("/")
+                    if (fName.isNotBlank()) {
+                        val destFile = File(context.filesDir, fName)
+                        destFile.outputStream().use { zipIn.copyTo(it) }
+                    }
+                } else if (name.startsWith("playlist_covers/")) {
+                    val fName = name.substringAfterLast("/")
+                    if (fName.isNotBlank()) {
+                        val destFile = File(coversDir, fName)
+                        destFile.outputStream().use { zipIn.copyTo(it) }
+                    }
+                }
+                zipIn.closeEntry()
+                entry = zipIn.nextEntry
+            }
+
+            if (jsonContent != null) {
+                importBundle(jsonContent)
+            } else {
+                error("El archivo ZIP no contiene backup.json válido.")
+            }
+        } else {
+            val jsonContent = buffered.bufferedReader(Charsets.UTF_8).readText()
+            importBundle(jsonContent)
+        }
+    }
+
+    suspend fun importThemes(inputStream: java.io.InputStream): Int = withContext(Dispatchers.IO) {
+        val buffered = if (inputStream.markSupported()) inputStream else java.io.BufferedInputStream(inputStream)
+        buffered.mark(4)
+        val header = ByteArray(4)
+        val readBytes = buffered.read(header)
+        buffered.reset()
+
+        val isZip = readBytes == 4 && header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() && header[2] == 0x03.toByte() && header[3] == 0x04.toByte()
+
+        val jsonString: String = if (isZip) {
+            val zipIn = java.util.zip.ZipInputStream(buffered)
+            var extractedJson: String? = null
+            var entry = zipIn.nextEntry
+            while (entry != null) {
+                val name = entry.name
+                if (name == "backup.json" || name.endsWith(".json")) {
+                    extractedJson = zipIn.bufferedReader(Charsets.UTF_8).readText()
+                } else if (name.startsWith("wallpapers/")) {
+                    val fName = name.substringAfterLast("/")
+                    if (fName.isNotBlank()) {
+                        val destFile = File(context.filesDir, fName)
+                        destFile.outputStream().use { zipIn.copyTo(it) }
+                    }
+                }
+                zipIn.closeEntry()
+                entry = zipIn.nextEntry
+            }
+            extractedJson ?: error("No se encontró archivo de temas en el ZIP.")
+        } else {
+            buffered.bufferedReader(Charsets.UTF_8).readText()
+        }
+
+        val currentTheme = preferences.themeSettings.first()
+        val importedPresets = mutableListOf<com.musica.paralosoidos.data.SavedThemePreset>()
+
+        runCatching {
+            val bundle = json.decodeFromString<AppDataBackupBundle>(jsonString)
+            bundle.appearance?.themeSettings?.let { ts ->
+                importedPresets.addAll(ts.customPresets)
+                importedPresets.add(
+                    com.musica.paralosoidos.data.SavedThemePreset(
+                        id = "imported-${System.currentTimeMillis()}",
+                        name = "Tema importado",
+                        settings = ts.copy(customPresets = emptyList())
+                    )
+                )
+            }
+        }.onFailure {
+            runCatching {
+                val presets = json.decodeFromString<List<com.musica.paralosoidos.data.SavedThemePreset>>(jsonString)
+                importedPresets.addAll(presets)
+            }.onFailure {
+                val single = json.decodeFromString<com.musica.paralosoidos.data.ThemeSettingsState>(jsonString)
+                importedPresets.addAll(single.customPresets)
+            }
+        }
+
+        val existingIds = currentTheme.customPresets.map { it.id }.toSet()
+        val uniqueNew = importedPresets.filterNot { it.id in existingIds }
+        val merged = currentTheme.customPresets + uniqueNew
+        preferences.saveThemeSettings(currentTheme.copy(customPresets = merged))
+        uniqueNew.size
+    }
+
 }

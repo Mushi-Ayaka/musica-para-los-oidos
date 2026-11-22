@@ -1,12 +1,16 @@
 package com.musica.paralosoidos.ui.library
 
+import com.musica.paralosoidos.data.CatalogTrackEntity
 import com.musica.paralosoidos.data.TrackEntity
 import java.util.Locale
 
 enum class SortOrder(val label: String) {
     AZ("A-Z"),
     ZA("Z-A"),
-    Recent("Recientes")
+    Recent("Recientes"),
+    MostPlayed("Más escuchadas"),
+    Linked("Vinculados"),
+    Unlinked("Desvinculados")
 }
 
 internal data class IndexedTrack(
@@ -30,7 +34,10 @@ internal object TrackFilter {
         indexed: List<IndexedTrack>,
         query: String,
         order: SortOrder,
-        letter: Char?
+        letter: Char?,
+        catalogMap: Map<String, CatalogTrackEntity> = emptyMap(),
+        hasLocalLrc: (TrackEntity) -> Boolean = { false },
+        playCounts: Map<Long, Int> = emptyMap()
     ): List<TrackEntity> {
         var result = indexed
         if (query.isNotBlank()) {
@@ -46,10 +53,23 @@ internal object TrackFilter {
                 result.filter { it.track.title.startsWith(letter, ignoreCase = true) }
             }
         }
+        val isTrackLinked: (TrackEntity) -> Boolean = { trk ->
+            val cat = catalogMap[trk.uri]
+            !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || hasLocalLrc(trk)
+        }
         return when (order) {
             SortOrder.AZ -> result.sortedBy { it.title }
             SortOrder.ZA -> result.sortedByDescending { it.title }
-            SortOrder.Recent -> result
+            SortOrder.Recent -> result.sortedWith(
+                compareByDescending<IndexedTrack> { maxOf(it.track.dateAdded, it.track.dateModified) }
+                    .thenByDescending { it.track.id }
+            )
+            SortOrder.MostPlayed -> result.sortedWith(
+                compareByDescending<IndexedTrack> { playCounts[it.track.id] ?: 0 }
+                    .thenBy { it.title }
+            )
+            SortOrder.Linked -> result.filter { isTrackLinked(it.track) }.sortedBy { it.title }
+            SortOrder.Unlinked -> result.filterNot { isTrackLinked(it.track) }.sortedBy { it.title }
         }.map { it.track }
     }
 }

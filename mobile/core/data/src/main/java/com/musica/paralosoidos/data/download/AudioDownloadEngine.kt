@@ -17,7 +17,8 @@ import java.io.File
 data class AudioDownloadResult(
     val audioUri: String,
     val mediaScanFile: File?,
-    val hasLrc: Boolean
+    val hasLrc: Boolean,
+    val lrcFile: File? = null
 )
 
 class AudioDownloadEngine(
@@ -100,15 +101,18 @@ class AudioDownloadEngine(
         // Esperar la tarea de letra sin bloquear
         val lyricsContent = runCatching { lyricsDeferred.await() }.getOrNull()
         var lrcSaved = false
+        var savedLrcFile: File? = null
         if (!lyricsContent.isNullOrBlank()) {
             val lrcFile = storageManager.saveLyricsFile(task.title, lyricsContent)
             lrcSaved = lrcFile != null && lrcFile.exists() && lrcFile.length() > 0
+            if (lrcSaved) savedLrcFile = lrcFile
         }
 
         AudioDownloadResult(
             audioUri = publishedAudio.uri.toString(),
             mediaScanFile = publishedAudio.mediaScanFile,
-            hasLrc = lrcSaved
+            hasLrc = lrcSaved,
+            lrcFile = savedLrcFile
         )
     }
 }

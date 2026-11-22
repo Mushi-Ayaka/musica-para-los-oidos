@@ -74,7 +74,8 @@ data class SavedEqPreset(
 data class MusicPlaylist(
     val id: String,
     val name: String,
-    val trackIds: List<Long>
+    val trackIds: List<Long>,
+    val coverUri: String? = null
 )
 
 object AudioOutputProfileIds {

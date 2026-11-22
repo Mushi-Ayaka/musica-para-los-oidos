@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TrackEntity::class, BackupStateEntity::class, CatalogTrackEntity::class, DownloadHistoryEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
@@ -64,6 +64,13 @@ abstract class MusicDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE catalog_tracks ADD COLUMN lrcPath TEXT")
                 db.execSQL("ALTER TABLE catalog_tracks ADD COLUMN lrcSynced INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE audio_tracks ADD COLUMN dateAdded INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE audio_tracks ADD COLUMN dateModified INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

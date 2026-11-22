@@ -29,7 +29,8 @@ data class AutoBackupFile(
 data class BackupPlaylist(
     val id: String = "",
     val name: String = "",
-    val tracks: List<BackupTrack> = emptyList()
+    val tracks: List<BackupTrack> = emptyList(),
+    val coverUri: String? = null
 )
 
 @Serializable
@@ -63,7 +64,8 @@ object AutoBackupCodec {
                 BackupPlaylist(
                     id = playlist.id,
                     name = playlist.name,
-                    tracks = playlist.trackIds.mapNotNull { tracksById[it] }.map(::toBackupTrack)
+                    tracks = playlist.trackIds.mapNotNull { tracksById[it] }.map(::toBackupTrack),
+                    coverUri = playlist.coverUri
                 )
             },
             theme = theme,
@@ -94,7 +96,8 @@ object AutoBackupCodec {
             MusicPlaylist(
                 id = saved.id.trim().ifBlank { UUID.randomUUID().toString() },
                 name = name,
-                trackIds = saved.tracks.mapNotNull { findTrack(it, library)?.id }.distinct()
+                trackIds = saved.tracks.mapNotNull { findTrack(it, library)?.id }.distinct(),
+                coverUri = saved.coverUri
             )
         }
 

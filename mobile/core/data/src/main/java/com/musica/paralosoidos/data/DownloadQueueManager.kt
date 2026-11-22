@@ -30,6 +30,8 @@ class DownloadQueueManager(
     private val audioDownloadEngine: AudioDownloadEngine,
     private val lyricsDownloadEngine: LyricsDownloadEngine,
     private val downloadHistoryDao: DownloadHistoryDao,
+    private val catalogTrackDao: CatalogTrackDao? = null,
+    private val youtubeDLRuntime: com.musica.paralosoidos.data.download.YoutubeDLRuntime? = null,
     private val onDownloadComplete: suspend (file: File) -> Unit = {}
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -133,6 +135,11 @@ class DownloadQueueManager(
         val job = scope.launch {
             try {
                 notificationManager.showProgressNotification(task.id, task.title, 0, "")
+                if (youtubeDLRuntime?.state?.value != com.musica.paralosoidos.data.download.YoutubeDLState.Ready) {
+                    updateTask(task.id) { it.copy(status = DownloadTaskStatus.QUEUED, errorMessage = "Preparando motor de descarga...") }
+                    youtubeDLRuntime?.ensureReady()
+                    updateTask(task.id) { it.copy(status = DownloadTaskStatus.DOWNLOADING, errorMessage = null) }
+                }
                 val downloadResult = audioDownloadEngine.download(
                     task = task,
                     storageManager = storageManager,
@@ -147,6 +154,36 @@ class DownloadQueueManager(
                     MediaScannerHelper.scanAndAwait(context, audioFile)
                     onDownloadComplete(audioFile)
                 }
+
+                // Auto-vincular a CatalogTrackDao con YouTube y LRC
+                catalogTrackDao?.let { dao ->
+                    val ytUrl = "https://www.youtube.com/watch?v=${task.videoId}"
+                    val audioUri = downloadResult.audioUri
+                    val lrcPath = downloadResult.lrcFile?.absolutePath
+                    val lrcSynced = downloadResult.hasLrc
+                    val catEntry = CatalogTrackEntity(
+                        id = "yt-${task.videoId}",
+                        title = task.title,
+                        artist = task.channel,
+                        album = "Descargas",
+                        durationMs = 0L,
+                        youtubeUrl = ytUrl,
+                        localUri = audioUri,
+                        lrcPath = lrcPath,
+                        lrcSynced = lrcSynced,
+                        metadataJson = kotlinx.serialization.json.buildJsonObject {
+                            put("id", kotlinx.serialization.json.JsonPrimitive(task.videoId))
+                            put("title", kotlinx.serialization.json.JsonPrimitive(task.title))
+                            put("artist", kotlinx.serialization.json.JsonPrimitive(task.channel))
+                            put("youtubeUrl", kotlinx.serialization.json.JsonPrimitive(ytUrl))
+                            if (lrcPath != null) put("lrcPath", kotlinx.serialization.json.JsonPrimitive(lrcPath))
+                            put("lrcSynced", kotlinx.serialization.json.JsonPrimitive(lrcSynced))
+                            put("autoLinkedDownload", kotlinx.serialization.json.JsonPrimitive(true))
+                        }.toString()
+                    )
+                    dao.upsert(catEntry)
+                }
+
                 updateTask(task.id) { it.copy(status = DownloadTaskStatus.COMPLETED, progress = 100, speed = "") }
                 val completedNotice = if (task.syncLyrics) {
                     if (downloadResult.hasLrc) "${task.title} (con letra)" else "${task.title} (sin letra)"

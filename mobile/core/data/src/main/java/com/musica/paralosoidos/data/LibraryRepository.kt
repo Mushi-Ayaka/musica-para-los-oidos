@@ -11,6 +11,10 @@ class LibraryRepository(private val container: AppContainer) {
     val themeSettings: Flow<ThemeSettingsState> = container.preferences.themeSettings
     val customEqPresets: Flow<List<SavedEqPreset>> = container.preferences.customEqPresets
     val lyricsScrollSpeed: Flow<Float> = container.preferences.lyricsScrollSpeed
+    val catalogTracks: Flow<List<CatalogTrackEntity>> = container.catalogTracks.observeAll()
+    val trackPlayCounts: Flow<Map<Long, Int>> = container.preferences.trackPlayCounts
+
+    fun hasLocalLrcFile(track: TrackEntity): Boolean = container.trackTrackerManager.hasLocalLrcFile(track)
 
     val eqEnabled: Flow<Boolean> = container.preferences.eqEnabled
     val activeEqPreset: Flow<String> = container.preferences.activeEqPreset

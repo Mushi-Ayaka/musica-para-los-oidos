@@ -45,7 +45,8 @@ class AppContainer(context: Context) {
         MusicDatabase.MIGRATION_3_4,
         MusicDatabase.MIGRATION_4_5,
         MusicDatabase.MIGRATION_5_6,
-        MusicDatabase.MIGRATION_6_7
+        MusicDatabase.MIGRATION_6_7,
+        MusicDatabase.MIGRATION_7_8
     ).fallbackToDestructiveMigration().build()
 
     val tracks = database.trackDao()
@@ -73,8 +74,25 @@ class AppContainer(context: Context) {
             audioDownloadEngine = audioDownloadEngine,
             lyricsDownloadEngine = lyricsDownloadEngine,
             downloadHistoryDao = downloadHistoryDao,
-            onDownloadComplete = { _ ->
-                runCatching { refreshLocalAudio(force = true) }
+            catalogTrackDao = catalogTracks,
+            youtubeDLRuntime = youtubeDLRuntime,
+            onDownloadComplete = { audioFile ->
+                runCatching {
+                    refreshLocalAudio(force = true)
+                    val allLocal = tracks.observeAll().first()
+                    val match = allLocal.firstOrNull {
+                        it.displayName == audioFile.name || it.title.equals(audioFile.nameWithoutExtension, ignoreCase = true)
+                    }
+                    if (match != null) {
+                        val cats = catalogTracks.observeAll().first()
+                        val cat = cats.firstOrNull {
+                            it.title.equals(match.title, ignoreCase = true) || it.localUri == audioFile.absolutePath
+                        }
+                        if (cat != null) {
+                            catalogTracks.upsert(cat.copy(localUri = match.uri))
+                        }
+                    }
+                }
             }
         )
     }
@@ -187,7 +205,9 @@ class AppContainer(context: Context) {
                 MediaStore.Audio.Media.DURATION,
                 MediaStore.Audio.Media.DISPLAY_NAME,
                 MediaStore.Audio.Media.DATA,
-                MediaStore.Audio.Media.RELATIVE_PATH
+                MediaStore.Audio.Media.RELATIVE_PATH,
+                MediaStore.Audio.Media.DATE_ADDED,
+                MediaStore.Audio.Media.DATE_MODIFIED
             )
         } else {
             arrayOf(
@@ -198,7 +218,9 @@ class AppContainer(context: Context) {
                 MediaStore.Audio.Media.ALBUM_ID,
                 MediaStore.Audio.Media.DURATION,
                 MediaStore.Audio.Media.DISPLAY_NAME,
-                MediaStore.Audio.Media.DATA
+                MediaStore.Audio.Media.DATA,
+                MediaStore.Audio.Media.DATE_ADDED,
+                MediaStore.Audio.Media.DATE_MODIFIED
             )
         }
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -219,6 +241,8 @@ class AppContainer(context: Context) {
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
             val dataColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+            val dateAddedCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
+            val dateModifiedCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_MODIFIED)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
@@ -266,7 +290,9 @@ class AppContainer(context: Context) {
                             !rawPath.isNullOrBlank() -> java.io.File(rawPath).parentFile?.name.orEmpty().ifBlank { "Música" }
                             else -> "Música"
                         }
-                    }
+                    },
+                    dateAdded = if (dateAddedCol >= 0 && !cursor.isNull(dateAddedCol)) cursor.getLong(dateAddedCol) else 0L,
+                    dateModified = if (dateModifiedCol >= 0 && !cursor.isNull(dateModifiedCol)) cursor.getLong(dateModifiedCol) else 0L
                 )
             }
         } ?: error("No se pudo consultar la biblioteca multimedia del dispositivo.")

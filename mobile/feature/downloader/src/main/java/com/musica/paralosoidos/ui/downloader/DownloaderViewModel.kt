@@ -82,6 +82,21 @@ class DownloaderViewModel(
 
     private var searchJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            runCatching { youtubeDLRuntime.ensureReady() }
+        }
+    }
+
+    fun checkAndUpdateYoutubeDL() {
+        if (youtubeDLRuntime.state.value != YoutubeDLState.Ready &&
+            youtubeDLRuntime.state.value != YoutubeDLState.Updating) {
+            viewModelScope.launch {
+                runCatching { youtubeDLRuntime.ensureReady() }
+            }
+        }
+    }
+
     fun onQueryChanged(newQuery: String) {
         _query.value = newQuery
     }

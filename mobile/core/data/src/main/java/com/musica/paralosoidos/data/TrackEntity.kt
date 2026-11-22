@@ -14,5 +14,7 @@ data class TrackEntity(
     val displayName: String,
     val artworkUri: String? = null,
     val folderPath: String = "",
-    val folderName: String = ""
+    val folderName: String = "",
+    val dateAdded: Long = 0L,
+    val dateModified: Long = 0L
 )

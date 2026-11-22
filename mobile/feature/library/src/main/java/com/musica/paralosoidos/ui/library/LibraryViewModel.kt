@@ -60,11 +60,20 @@ class LibraryViewModel(private val repository: LibraryRepository) : ViewModel() 
 
     val filteredTracks: StateFlow<List<TrackEntity>> = combine(
         indexedTracks,
-        _searchQuery,
-        _sortOrder,
-        _letterFilter
-    ) { source, query, order, letter ->
-        TrackFilter.apply(source, query, order, letter)
+        combine(_searchQuery, _sortOrder, _letterFilter) { q, o, l -> Triple(q, o, l) },
+        repository.catalogTracks,
+        repository.trackPlayCounts
+    ) { source, (query, order, letter), catalog, playCounts ->
+        val catMap = catalog.associateBy { it.localUri.orEmpty() }
+        TrackFilter.apply(
+            indexed = source,
+            query = query,
+            order = order,
+            letter = letter,
+            catalogMap = catMap,
+            hasLocalLrc = repository::hasLocalLrcFile,
+            playCounts = playCounts
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val albums: StateFlow<List<Pair<String, List<TrackEntity>>>> = visibleTracks.map { list ->

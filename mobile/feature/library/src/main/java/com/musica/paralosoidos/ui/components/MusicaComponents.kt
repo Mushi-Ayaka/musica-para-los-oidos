@@ -68,13 +68,13 @@ import com.musica.paralosoidos.data.FolderItem
 import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.musica.paralosoidos.data.PlaylistImportPlan
 import com.musica.paralosoidos.data.TrackEntity
 import com.musica.paralosoidos.ui.theme.MusicaStyle
@@ -208,12 +208,21 @@ fun PlaylistGalleryCard(
                     .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), MusicaStyle.Shape.medium),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
+                if (!playlist.coverUri.isNullOrBlank()) {
+                    AsyncImage(
+                        model = playlist.coverUri,
+                        contentDescription = "Portada de ${playlist.name}",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -251,7 +260,9 @@ fun PlaylistDetailHeader(
     onPlayAll: (List<TrackEntity>) -> Unit,
     onShuffle: (List<TrackEntity>) -> Unit,
     onAddSongsClick: () -> Unit,
-    onDeletePlaylist: () -> Unit
+    onDeletePlaylist: () -> Unit,
+    onPickCover: () -> Unit = {},
+    onClearCover: () -> Unit = {}
 ) {
     val selectedTracks = remember(playlist.trackIds, allTracksById) {
         playlist.trackIds.mapNotNull(allTracksById::get)
@@ -291,18 +302,28 @@ fun PlaylistDetailHeader(
                     modifier = Modifier
                         .size(72.dp)
                         .clip(MusicaStyle.Shape.row)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                        .clickable { onPickCover() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = null,
-                        modifier = Modifier.size(36.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    if (!playlist.coverUri.isNullOrBlank()) {
+                        AsyncImage(
+                            model = playlist.coverUri,
+                            contentDescription = "Portada de ${playlist.name}",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = null,
+                            modifier = Modifier.size(36.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
                 Spacer(Modifier.width(16.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     val totalDurationMs = remember(selectedTracks) { selectedTracks.sumOf { it.durationMs } }
                     val formattedDuration = remember(totalDurationMs) {
                         val totalSec = totalDurationMs / 1000
@@ -318,6 +339,19 @@ fun PlaylistDetailHeader(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        TextButton(onClick = onPickCover, contentPadding = PaddingValues(0.dp)) {
+                            Text("Cambiar portada", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (!playlist.coverUri.isNullOrBlank()) {
+                            TextButton(onClick = onClearCover, contentPadding = PaddingValues(0.dp)) {
+                                Text("Quitar", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
                 }
             }
         }
