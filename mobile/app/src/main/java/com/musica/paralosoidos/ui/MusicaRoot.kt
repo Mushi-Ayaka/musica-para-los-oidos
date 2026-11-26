@@ -746,19 +746,16 @@ fun MusicaRoot(
                                 onMediaVolumeChange = { vol ->
                                     coroutineScope.launch { container.preferences.saveMediaVolume(vol) }
                                 },
-                                initialEqEnabled = eqEnabled,
-                                initialPresetName = activeEqPreset,
-                                initialEqBands = eqBands,
-                                initialBassBoost = bassBoost,
-                                initialVirtualizer = virtualizer,
-                                initialSpeakerBoost = speakerBoost,
-                                onEqStateChange = { enabled, preset, bands, bass, virt, spk ->
+                                onPersistEqSettings = {
                                     coroutineScope.launch {
-                                        container.preferences.saveEqState(enabled, preset, bands, bass, virt, spk)
+                                        container.preferences.saveEqEnabled(AudioEffectsManager.isEnabled.value)
+                                        container.preferences.saveActiveEqPreset(AudioEffectsManager.selectedPreset.value)
+                                        container.preferences.saveEqBands(AudioEffectsManager.bands.value)
+                                        container.preferences.saveBassBoost(AudioEffectsManager.bassStrength.value)
+                                        container.preferences.saveVirtualizer(AudioEffectsManager.virtualizerStrength.value)
+                                        container.preferences.saveSpeakerBoost(AudioEffectsManager.speakerBoost.value)
                                     }
-                                },
-                                customPresets = customEqPresets,
-                                savedProfileId = storedOutputProfileId
+                                }
                             )
                         }
 

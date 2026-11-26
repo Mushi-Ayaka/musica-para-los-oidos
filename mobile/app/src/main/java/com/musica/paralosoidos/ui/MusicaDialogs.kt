@@ -9,6 +9,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import com.musica.paralosoidos.data.CatalogTrackEntity
+import com.musica.paralosoidos.data.DownloadSearchResult
 import com.musica.paralosoidos.data.MusicPlaylist
 import com.musica.paralosoidos.data.PlaylistImportPlan
 import com.musica.paralosoidos.data.TrackEntity
@@ -38,7 +39,7 @@ fun MusicaDialogs(
     catalogMap: Map<String, CatalogTrackEntity>,
     onDismissTrackLinks: () -> Unit,
     onSaveTrackLinks: (TrackEntity, String?, String?, Boolean, String?) -> Unit,
-    onAutoSearchYouTube: suspend (TrackEntity) -> String?,
+    onAutoSearchYouTube: suspend (TrackEntity) -> DownloadSearchResult?,
     onAutoSearchLrcDetailed: suspend (TrackEntity) -> LyricsFetchResult?,
     onDownloadLrc: suspend (TrackEntity, String, String?) -> Boolean,
     onUnlinkTrack: (TrackEntity) -> Unit,
