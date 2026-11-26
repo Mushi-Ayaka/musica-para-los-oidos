@@ -9,7 +9,8 @@ internal data class StoredMediaItem(
     val uri: String,
     val title: String?,
     val artist: String?,
-    val album: String?
+    val album: String?,
+    val artworkUri: String? = null
 )
 
 internal data class StoredPlaybackState(
@@ -42,7 +43,8 @@ internal class PlaybackStateStore(context: Context) {
                             uri = uri,
                             title = item.optString("title").takeIf(String::isNotBlank),
                             artist = item.optString("artist").takeIf(String::isNotBlank),
-                            album = item.optString("album").takeIf(String::isNotBlank)
+                            album = item.optString("album").takeIf(String::isNotBlank),
+                            artworkUri = item.optString("artworkUri").takeIf(String::isNotBlank)
                         )
                     )
                 }
@@ -71,6 +73,7 @@ internal class PlaybackStateStore(context: Context) {
                     .put("title", item.title.orEmpty())
                     .put("artist", item.artist.orEmpty())
                     .put("album", item.album.orEmpty())
+                    .put("artworkUri", item.artworkUri.orEmpty())
             )
         }
         val root = JSONObject()

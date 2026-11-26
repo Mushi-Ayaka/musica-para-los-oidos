@@ -242,6 +242,11 @@ private fun mediaItemFor(track: TrackEntity): MediaItem =
                 .setTitle(track.title)
                 .setArtist(track.artist)
                 .setAlbumTitle(track.album)
+                .apply {
+                    track.artworkUri?.takeIf(String::isNotBlank)?.let {
+                        setArtworkUri(android.net.Uri.parse(it))
+                    }
+                }
                 .build()
         )
         .build()

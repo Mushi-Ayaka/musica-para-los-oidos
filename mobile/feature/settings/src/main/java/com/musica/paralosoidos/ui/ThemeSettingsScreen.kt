@@ -13,7 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -100,7 +101,8 @@ fun ThemeSettingsScreen(
                     val selected = settings.presetId == preset.id
                     Card(
                         modifier = Modifier
-                            .size(width = 148.dp, height = 94.dp)
+                            .width(152.dp)
+                            .heightIn(min = 96.dp)
                             .clickable {
                                 onSettingsChange(
                                     preset.settings.copy(customPresets = settings.customPresets)
@@ -117,14 +119,15 @@ fun ThemeSettingsScreen(
                     ) {
                         Column(
                             Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.SpaceBetween
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(preset.name, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(preset.name, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 preset.description,
                                 color = MusicaStyle.Colors.neutral,
-                                fontSize = 10.sp,
-                                lineHeight = 14.sp
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }

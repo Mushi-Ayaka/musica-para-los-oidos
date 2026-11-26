@@ -56,6 +56,13 @@ class PlaybackService : MediaSessionService() {
             ) {
                 persistState()
             }
+            if (events.contains(Player.EVENT_TIMELINE_CHANGED) ||
+                events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
+                events.contains(Player.EVENT_IS_PLAYING_CHANGED) ||
+                events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)
+            ) {
+                notifyWidgetStateChanged(player)
+            }
         }
     }
 
@@ -83,6 +90,48 @@ class PlaybackService : MediaSessionService() {
             .build()
         handler.postDelayed(persistRunnable, PERSIST_INTERVAL_MS)
         handler.postDelayed(crossfadeRunnable, 250L)
+        notifyWidgetStateChanged(player)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val player = exoPlayer
+        when (intent?.action) {
+            ACTION_WIDGET_PLAY_PAUSE -> {
+                if (player != null && player.mediaItemCount > 0) {
+                    if (player.isPlaying) {
+                        player.pause()
+                    } else {
+                        if (player.playbackState == Player.STATE_IDLE) {
+                            player.prepare()
+                        }
+                        player.play()
+                    }
+                }
+            }
+            ACTION_WIDGET_NEXT -> {
+                if (player != null && player.mediaItemCount > 0) {
+                    if (player.hasNextMediaItem()) {
+                        player.seekToNextMediaItem()
+                    } else {
+                        player.seekTo(0, 0L)
+                    }
+                    if (!player.isPlaying) player.play()
+                }
+            }
+            ACTION_WIDGET_PREV -> {
+                if (player != null && player.mediaItemCount > 0) {
+                    if (player.currentPosition > 3_000L) {
+                        player.seekTo(0L)
+                    } else if (player.hasPreviousMediaItem()) {
+                        player.seekToPreviousMediaItem()
+                    } else {
+                        player.seekTo(0L)
+                    }
+                    if (!player.isPlaying) player.play()
+                }
+            }
+        }
+        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
@@ -111,6 +160,11 @@ class PlaybackService : MediaSessionService() {
                             .setTitle(stored.title)
                             .setArtist(stored.artist)
                             .setAlbumTitle(stored.album)
+                            .apply {
+                                stored.artworkUri?.takeIf(String::isNotBlank)?.let {
+                                    setArtworkUri(Uri.parse(it))
+                                }
+                            }
                             .build()
                     )
                     .build()
@@ -146,7 +200,8 @@ class PlaybackService : MediaSessionService() {
                 uri = uri.toString(),
                 title = item.mediaMetadata.title?.toString(),
                 artist = item.mediaMetadata.artist?.toString(),
-                album = item.mediaMetadata.albumTitle?.toString()
+                album = item.mediaMetadata.albumTitle?.toString(),
+                artworkUri = item.mediaMetadata.artworkUri?.toString()
             )
         }
         if (items.isEmpty()) {
@@ -186,7 +241,26 @@ class PlaybackService : MediaSessionService() {
         exoPlayer?.release()
         mediaSession = null
         exoPlayer = null
+        notifyWidgetStateChanged(null)
         super.onDestroy()
+    }
+
+    private fun notifyWidgetStateChanged(player: Player?) {
+        val current = player?.currentMediaItem
+        val title = current?.mediaMetadata?.title?.toString().orEmpty()
+        val artist = current?.mediaMetadata?.artist?.toString().orEmpty()
+        val artworkUri = current?.mediaMetadata?.artworkUri?.toString().orEmpty()
+        val isPlaying = player?.isPlaying == true
+        getSharedPreferences(WIDGET_PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putString(KEY_WIDGET_TITLE, title)
+            .putString(KEY_WIDGET_ARTIST, artist)
+            .putString(KEY_WIDGET_ARTWORK_URI, artworkUri)
+            .putBoolean(KEY_WIDGET_IS_PLAYING, isPlaying)
+            .apply()
+        sendBroadcast(
+            Intent(ACTION_WIDGET_STATE_CHANGED).setPackage(packageName)
+        )
     }
 
 
@@ -245,7 +319,16 @@ class PlaybackService : MediaSessionService() {
         handler.post(fadeInRunnable)
     }
 
-    private companion object {
-        const val PERSIST_INTERVAL_MS = 5_000L
+    companion object {
+        private const val PERSIST_INTERVAL_MS = 5_000L
+        const val WIDGET_PREFS_NAME = "widget_state"
+        const val KEY_WIDGET_TITLE = "title"
+        const val KEY_WIDGET_ARTIST = "artist"
+        const val KEY_WIDGET_ARTWORK_URI = "artwork_uri"
+        const val KEY_WIDGET_IS_PLAYING = "is_playing"
+        const val ACTION_WIDGET_STATE_CHANGED = "com.musica.paralosoidos.action.WIDGET_STATE_CHANGED"
+        const val ACTION_WIDGET_PLAY_PAUSE = "com.musica.paralosoidos.action.WIDGET_PLAY_PAUSE"
+        const val ACTION_WIDGET_PREV = "com.musica.paralosoidos.action.WIDGET_PREV"
+        const val ACTION_WIDGET_NEXT = "com.musica.paralosoidos.action.WIDGET_NEXT"
     }
 }

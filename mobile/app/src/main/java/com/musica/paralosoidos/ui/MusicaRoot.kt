@@ -1,84 +1,39 @@
 ﻿package com.musica.paralosoidos.ui
 
-import com.musica.paralosoidos.data.backup.PlaybackBackupState
-import com.musica.paralosoidos.ui.components.TrackLinksBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.border
-import java.io.File
-import kotlinx.coroutines.flow.first
-
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
-import com.musica.paralosoidos.ui.downloader.DownloaderScreen
-import com.musica.paralosoidos.ui.downloader.DownloaderViewModel
-import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -91,59 +46,49 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
-import com.musica.paralosoidos.data.AppContainer
 import com.musica.paralosoidos.BuildConfig
+import com.musica.paralosoidos.data.AppContainer
 import com.musica.paralosoidos.data.AudioOutputProfileIds
-import com.musica.paralosoidos.data.AutoBackupCodec
-import com.musica.paralosoidos.data.DownloadSearchResult
+import com.musica.paralosoidos.data.DownloadSettingsState
+import com.musica.paralosoidos.data.MusicPlaylist
 import com.musica.paralosoidos.data.PlaylistImportPlan
 import com.musica.paralosoidos.data.PlaylistTextCodec
-import com.musica.paralosoidos.data.tracker.TrackTrackerManager
+import com.musica.paralosoidos.data.TrackEntity
+import com.musica.paralosoidos.data.backup.PlaybackBackupState
+import com.musica.paralosoidos.data.backup.TrackMetadataBackup
 import com.musica.paralosoidos.playback.AudioEffectsManager
-import com.musica.paralosoidos.ui.LyricsSettingsSection
-import com.musica.paralosoidos.ui.ThemeSettingsSection
-import com.musica.paralosoidos.ui.components.AddTracksToPlaylistDialog
-import com.musica.paralosoidos.ui.components.EmptyLibrary
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import com.musica.paralosoidos.ui.components.FolderRow
-import com.musica.paralosoidos.ui.components.PlaylistDetailHeader
-import com.musica.paralosoidos.ui.components.PlaylistGalleryCard
-import com.musica.paralosoidos.ui.components.PlaylistImportConflictDialog
-import com.musica.paralosoidos.ui.components.PlaylistTrackRow
-import com.musica.paralosoidos.ui.components.TrackRow
-import com.musica.paralosoidos.ui.design.SectionTitle
+import com.musica.paralosoidos.ui.downloader.DownloaderScreen
+import com.musica.paralosoidos.ui.downloader.DownloaderViewModel
 import com.musica.paralosoidos.ui.equalizer.EqualizerScreenContent
 import com.musica.paralosoidos.ui.library.LibraryViewModel
-import com.musica.paralosoidos.ui.library.SortOrder
 import com.musica.paralosoidos.ui.player.FullPlayer
 import com.musica.paralosoidos.ui.player.MiniPlayer
 import com.musica.paralosoidos.ui.player.PlaybackViewModel
-import com.musica.paralosoidos.ui.theme.MusicaStyle
 import com.musica.paralosoidos.ui.update.UpdateCircleButton
 import com.musica.paralosoidos.ui.update.UpdateDialog
 import com.musica.paralosoidos.ui.update.UpdateViewModel
-import kotlinx.coroutines.Dispatchers
+import com.musica.paralosoidos.widget.MusicWidgetProvider
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -167,10 +112,14 @@ fun MusicaRoot(
     hasAudioPermission: () -> Boolean,
     requestAudioPermission: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
     val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory(container.libraryRepository))
     val downloaderViewModel: DownloaderViewModel = viewModel(
         factory = DownloaderViewModel.Factory(
-            androidx.compose.ui.platform.LocalContext.current.applicationContext,
+            context.applicationContext,
             container.downloadSettings,
             container.networkMonitor,
             container.downloadQueueManager,
@@ -178,6 +127,15 @@ fun MusicaRoot(
             container.youtubeDLRuntime
         )
     )
+    val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container.libraryRepository))
+    val updateViewModel: UpdateViewModel = viewModel(
+        factory = UpdateViewModel.Factory(
+            context = context,
+            updateRepository = container.updateRepository,
+            currentVersion = BuildConfig.VERSION_NAME
+        )
+    )
+
     val tracks by libraryViewModel.tracks.collectAsStateWithLifecycle()
     val themeSettings by libraryViewModel.themeSettings.collectAsStateWithLifecycle()
     val customEqPresets by libraryViewModel.customEqPresets.collectAsStateWithLifecycle()
@@ -186,18 +144,14 @@ fun MusicaRoot(
     val searchQuery by libraryViewModel.searchQuery.collectAsStateWithLifecycle()
     val librarySubTab by libraryViewModel.librarySubTab.collectAsStateWithLifecycle()
     val currentSortOrder by libraryViewModel.sortOrder.collectAsStateWithLifecycle()
-    val crossfadeSeconds by container.preferences.crossfadeSeconds.collectAsStateWithLifecycle(
-        initialValue = 0,
-        lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-    )
     val selectedLetterFilter by libraryViewModel.letterFilter.collectAsStateWithLifecycle()
     val scanMessage by libraryViewModel.scanMessage.collectAsStateWithLifecycle()
     val filteredTracks by libraryViewModel.filteredTracks.collectAsStateWithLifecycle()
     val albums by libraryViewModel.albums.collectAsStateWithLifecycle()
     val visibleTracks by libraryViewModel.visibleTracks.collectAsStateWithLifecycle()
     val folderItems by libraryViewModel.folderItems.collectAsStateWithLifecycle()
-    var selectedFolderPath by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedFolderTracks = remember(tracks, selectedFolderPath) { tracks.filter { it.folderPath == selectedFolderPath } }
+
+    val crossfadeSeconds by container.preferences.crossfadeSeconds.collectAsStateWithLifecycle(initialValue = 0)
     val eqEnabled by container.preferences.eqEnabled.collectAsStateWithLifecycle(initialValue = false)
     val activeEqPreset by container.preferences.activeEqPreset.collectAsStateWithLifecycle(initialValue = "Plano (Fidelidad de Estudio)")
     val eqBands by container.preferences.eqBands.collectAsStateWithLifecycle(initialValue = List(10) { 0 })
@@ -205,16 +159,15 @@ fun MusicaRoot(
     val virtualizer by container.preferences.virtualizer.collectAsStateWithLifecycle(initialValue = 0)
     val speakerBoost by container.preferences.speakerBoost.collectAsStateWithLifecycle(initialValue = 0)
     val mediaVolume by container.preferences.mediaVolume.collectAsStateWithLifecycle(initialValue = 100f)
-    val recentTrackIds by container.preferences.recentTrackIds.collectAsStateWithLifecycle(
-        initialValue = emptyList(),
-        lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val recentTrackIds by container.preferences.recentTrackIds.collectAsStateWithLifecycle(initialValue = emptyList())
+    val recentPlaylistIds by container.preferences.recentPlaylistIds.collectAsStateWithLifecycle(initialValue = emptyList())
+    val storedOutputProfileId by container.audioOutputProfileSettings.profileId.collectAsStateWithLifecycle(
+        initialValue = AudioOutputProfileIds.STUDIO_MONITOR
     )
-    val recentPlaylistIds by container.preferences.recentPlaylistIds.collectAsStateWithLifecycle(
-        initialValue = emptyList(),
-        lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val downloadSettingsState by container.downloadSettings.state.collectAsStateWithLifecycle(
+        initialValue = DownloadSettingsState()
     )
 
-    val playbackViewModel: PlaybackViewModel = viewModel(factory = PlaybackViewModel.Factory(container.libraryRepository))
     val nowPlaying by playbackViewModel.nowPlaying.collectAsStateWithLifecycle()
     val isPlaying by playbackViewModel.isPlaying.collectAsStateWithLifecycle()
     val position by playbackViewModel.position.collectAsStateWithLifecycle()
@@ -227,23 +180,27 @@ fun MusicaRoot(
 
     var selectedTabName by rememberSaveable { mutableStateOf(AppTab.Home.name) }
     val selectedTab = runCatching { AppTab.valueOf(selectedTabName) }.getOrDefault(AppTab.Home)
+    var selectedFolderPath by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedPlaylistForDetail = playlists.firstOrNull { it.id == selectedPlaylistId }
     var showAddTracksDialog by rememberSaveable { mutableStateOf(false) }
+    var showNewPlaylistDialog by rememberSaveable { mutableStateOf(false) }
+    var newPlaylistName by rememberSaveable { mutableStateOf("") }
+    var showPlayer by rememberSaveable { mutableStateOf(false) }
+
     var pendingImportPlan by remember { mutableStateOf<PlaylistImportPlan?>(null) }
     var audioOutputProfileMessage by remember { mutableStateOf<String?>(null) }
-    var showPlayer by rememberSaveable { mutableStateOf(false) }
     var themeMessage by remember { mutableStateOf<String?>(null) }
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
     var playlistMessage by remember { mutableStateOf<String?>(null) }
-
-    var missingTracksFromBackup by remember { mutableStateOf<List<com.musica.paralosoidos.data.backup.TrackMetadataBackup>?>(null) }
+    var missingTracksFromBackup by remember { mutableStateOf<List<TrackMetadataBackup>?>(null) }
     var trackerSyncProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var trackerJob by remember { mutableStateOf<Job?>(null) }
     val isTrackerSyncing = trackerJob != null
-    var selectedTrackForLinks by remember { mutableStateOf<com.musica.paralosoidos.data.TrackEntity?>(null) }
+    var selectedTrackForLinks by remember { mutableStateOf<TrackEntity?>(null) }
 
+    val selectedPlaylistForDetail = playlists.firstOrNull { it.id == selectedPlaylistId }
+    val selectedFolderTracks = remember(tracks, selectedFolderPath) { tracks.filter { it.folderPath == selectedFolderPath } }
+    val tracksByIdLong = remember(tracks) { tracks.associateBy { it.id } }
+    val playlistsById = remember(playlists) { playlists.associateBy { it.id } }
     val catalogTracks by container.catalogTracks.observeAll().collectAsStateWithLifecycle(emptyList())
     val catalogMap = remember(catalogTracks) { catalogTracks.associateBy { it.localUri.orEmpty() } }
     val trackerCircleColorHex by container.preferences.trackerCircleColor.collectAsStateWithLifecycle("#FFFFFF")
@@ -254,10 +211,20 @@ fun MusicaRoot(
     val trackerFrequency by container.preferences.trackerFrequency.collectAsStateWithLifecycle("ON_NEW_TRACKS_ONLY")
     val trackerIntensity by container.preferences.trackerIntensity.collectAsStateWithLifecycle("MEDIUM")
     val downloadConcurrency by container.preferences.downloadConcurrency.collectAsStateWithLifecycle(1)
-    val downloadRetryCount by container.preferences.downloadRetryCount.collectAsStateWithLifecycle(1)
     val autoBackupInterval by container.preferences.autoBackupInterval.collectAsStateWithLifecycle("DAILY")
+    val autoBackupMessage by container.autoBackup.lastMessage.collectAsStateWithLifecycle()
 
-    fun startTrackerSync(tracksToSync: List<com.musica.paralosoidos.data.TrackEntity>) {
+    val homeListState = rememberLazyListState()
+    val libraryListState = rememberLazyListState()
+    val settingsListState = rememberLazyListState()
+
+    fun showFeedback(message: String) {
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    fun startTrackerSync(tracksToSync: List<TrackEntity>) {
         if (tracksToSync.isEmpty() || trackerJob != null) return
         trackerJob = coroutineScope.launch {
             trackerSyncProgress = 0 to tracksToSync.size
@@ -265,12 +232,12 @@ fun MusicaRoot(
                 container.trackTrackerManager.runAutoTracking(tracksToSync) { current, total ->
                     trackerSyncProgress = current to total
                 }
-                playlistMessage = "Sincronización de Trackers finalizada."
+                showFeedback("Sincronización de Trackers finalizada.")
             } catch (cancelled: CancellationException) {
-                playlistMessage = "Sincronización cancelada."
+                showFeedback("Sincronización cancelada.")
                 throw cancelled
             } catch (error: Exception) {
-                playlistMessage = "Falló la sincronización: ${error.localizedMessage ?: "error desconocido"}"
+                showFeedback("Falló la sincronización: ${error.localizedMessage ?: "error desconocido"}")
             } finally {
                 trackerSyncProgress = null
                 trackerJob = null
@@ -278,17 +245,12 @@ fun MusicaRoot(
         }
     }
 
-    fun updateRecentTracks(track: com.musica.paralosoidos.data.TrackEntity) {
+    fun updateRecentTracks(track: TrackEntity) {
         coroutineScope.launch {
-            // Obtener IDs actuales directamente desde las preferencias
-            kotlin.runCatching {
-                val recentIds = container.preferences.recentTrackIds.first()
-                val currentIds = recentIds.toMutableList()
-                // Remover si ya existe
+            runCatching {
+                val currentIds = container.preferences.recentTrackIds.first().toMutableList()
                 currentIds.remove(track.id)
-                // Agregar al inicio
                 currentIds.add(0, track.id)
-                // Mantener solo las últimas 3
                 container.preferences.saveRecentTrackIds(currentIds.take(3))
             }
         }
@@ -296,21 +258,16 @@ fun MusicaRoot(
 
     fun updateRecentPlaylists(playlistId: String) {
         coroutineScope.launch {
-            // Obtener IDs actuales directamente desde las preferencias
-            kotlin.runCatching {
-                val recentIds = container.preferences.recentPlaylistIds.first()
-                val currentIds = recentIds.toMutableList()
-                // Remover si ya existe
+            runCatching {
+                val currentIds = container.preferences.recentPlaylistIds.first().toMutableList()
                 currentIds.remove(playlistId)
-                // Agregar al inicio
                 currentIds.add(0, playlistId)
-                // Mantener solo las últimas 3
                 container.preferences.saveRecentPlaylistIds(currentIds.take(3))
             }
         }
     }
 
-    fun playTrackAndUpdateRecent(track: com.musica.paralosoidos.data.TrackEntity, trackList: List<com.musica.paralosoidos.data.TrackEntity>) {
+    fun playTrackAndUpdateRecent(track: TrackEntity, trackList: List<TrackEntity>) {
         playbackViewModel.playTrack(track, trackList)
         updateRecentTracks(track)
         coroutineScope.launch {
@@ -318,11 +275,49 @@ fun MusicaRoot(
         }
     }
 
+    LaunchedEffect(nowPlaying?.id) {
+        val current = nowPlaying ?: return@LaunchedEffect
+        updateRecentTracks(current)
+    }
+
     LaunchedEffect(visibleTracks, trackerFrequency) {
         if ((trackerFrequency == "ON_APP_OPEN" || trackerFrequency == "ON_NEW_TRACKS_ONLY") &&
             visibleTracks.isNotEmpty()
         ) {
             startTrackerSync(visibleTracks)
+        }
+    }
+
+    LaunchedEffect(autoBackupMessage) {
+        autoBackupMessage?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            container.autoBackup.clearMessage()
+        }
+    }
+
+    LaunchedEffect(playlistMessage) {
+        playlistMessage?.let {
+            showFeedback(it)
+            playlistMessage = null
+        }
+    }
+
+    val downloadFolderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                coroutineScope.launch {
+                    container.downloadSettings.saveOutputFolderUri(uri.toString())
+                    showFeedback("Carpeta de descarga guardada.")
+                }
+            } catch (error: SecurityException) {
+                showFeedback("No se pudo acceder a la carpeta: ${error.localizedMessage ?: "permiso denegado"}")
+            }
         }
     }
 
@@ -344,8 +339,8 @@ fun MusicaRoot(
                             container.centralBackupManager.exportZipBundle(out, currentPlayback)
                         } ?: error("No se pudo escribir en el archivo.")
                     }
-                }.onSuccess { playlistMessage = "Copia completa exportada con exito." }
-                    .onFailure { playlistMessage = "Error al exportar copia: ${it.localizedMessage ?: "error desconocido"}" }
+                }.onSuccess { showFeedback("Copia completa exportada con éxito.") }
+                    .onFailure { showFeedback("Error al exportar copia: ${it.localizedMessage ?: "error desconocido"}") }
             }
         }
     }
@@ -361,12 +356,12 @@ fun MusicaRoot(
                             ?: error("No se pudo leer el archivo.")
                         stream.use { container.centralBackupManager.importBundleStream(it) }
                     }
-                    playlistMessage = "Copia restaurada: ${result.playlistCount} listas y ${result.trackMetadataCount} pistas procesadas."
+                    showFeedback("Copia restaurada: ${result.playlistCount} listas y ${result.trackMetadataCount} pistas procesadas.")
                     if (result.missingLinkedTracks.isNotEmpty()) {
                         missingTracksFromBackup = result.missingLinkedTracks
                     }
                 }.onFailure {
-                    playlistMessage = "Error al importar copia: ${it.localizedMessage ?: "formato inválido"}"
+                    showFeedback("Error al importar copia: ${it.localizedMessage ?: "formato inválido"}")
                 }
             }
         }
@@ -383,9 +378,39 @@ fun MusicaRoot(
                             ?: error("No se pudo leer el archivo.")
                         stream.use { container.centralBackupManager.importThemes(it) }
                     }
-                    playlistMessage = if (count > 0) "Se importaron $count temas con éxito." else "No se encontraron temas nuevos."
+                    showFeedback(if (count > 0) "Se importaron $count temas con éxito." else "No se encontraron temas nuevos.")
                 }.onFailure {
-                    playlistMessage = "Error al importar temas: ${it.localizedMessage ?: "error desconocido"}"
+                    showFeedback("Error al importar temas: ${it.localizedMessage ?: "error desconocido"}")
+                }
+            }
+        }
+    }
+
+    val importPlaylistJson = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                runCatching {
+                    val content = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)
+                            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                            ?: error("No se pudo leer el archivo seleccionado.")
+                    }
+                    val plan = PlaylistTextCodec.analyzePlaylistJson(content, tracks)
+                    if (plan.conflicts.isEmpty()) {
+                        val imported = PlaylistTextCodec.createPlaylist(plan.playlistName, plan.autoResolvedTrackIds)
+                        libraryViewModel.upsertPlaylist(imported) { success, message ->
+                            showFeedback(
+                                if (success) "Lista '${plan.playlistName}' importada (${plan.autoResolvedTrackIds.size} pistas)."
+                                else (message ?: "No se pudo importar la lista.")
+                            )
+                        }
+                    } else {
+                        pendingImportPlan = plan
+                    }
+                }.onFailure {
+                    showFeedback("No se pudo importar la lista: ${it.localizedMessage ?: "error desconocido"}")
                 }
             }
         }
@@ -407,10 +432,10 @@ fun MusicaRoot(
                     }
                     val fileUri = Uri.fromFile(destFile).toString()
                     libraryViewModel.upsertPlaylist(currentPl.copy(coverUri = fileUri)) { ok, err ->
-                        if (!ok && err != null) playlistMessage = err
+                        if (!ok && err != null) showFeedback(err)
                     }
                 }.onFailure {
-                    playlistMessage = "Error al guardar portada: ${it.localizedMessage ?: "error"}"
+                    showFeedback("Error al guardar portada: ${it.localizedMessage ?: "error"}")
                 }
             }
         }
@@ -420,112 +445,14 @@ fun MusicaRoot(
         showPlayer = false
     }
 
-    BackHandler(enabled = selectedFolderPath != null) {
+    BackHandler(enabled = !showPlayer && selectedTab == AppTab.Library && selectedPlaylistId != null && librarySubTab == "Listas") {
+        selectedPlaylistId = null
+    }
+
+    BackHandler(enabled = !showPlayer && selectedTab == AppTab.Library && selectedFolderPath != null && librarySubTab == "Carpetas") {
         selectedFolderPath = null
     }
 
-    var showNewPlaylistDialog by rememberSaveable { mutableStateOf(false) }
-    var newPlaylistName by rememberSaveable { mutableStateOf("") }
-    val autoBackupMessage by container.autoBackup.lastMessage.collectAsStateWithLifecycle()
-    val updateViewModel: UpdateViewModel = viewModel(
-        factory = UpdateViewModel.Factory(
-            context = context,
-            updateRepository = container.updateRepository,
-            currentVersion = BuildConfig.VERSION_NAME
-        )
-    )
-
-    LaunchedEffect(autoBackupMessage) {
-        autoBackupMessage?.let { message ->
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-            container.autoBackup.clearMessage()
-        }
-    }
-    val exportTrackNames = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/plain")
-    ) { uri ->
-        if (uri != null) {
-            coroutineScope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)
-                            ?.use { it.write(PlaylistTextCodec.exportNamesAsText(tracks)) }
-                            ?: error("No se pudo crear el archivo de texto.")
-                    }
-                }.onSuccess { playlistMessage = "Se exportaron los nombres de las canciones." }
-                    .onFailure { playlistMessage = "No se pudo exportar: ${it.localizedMessage ?: "error desconocido"}" }
-            }
-        }
-    }
-    val importPlaylistJson = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            coroutineScope.launch {
-                runCatching {
-                    val content = withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(uri)
-                            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                            ?: error("No se pudo leer el archivo seleccionado.")
-                    }
-                    val plan = PlaylistTextCodec.analyzePlaylistJson(content, tracks)
-                    if (plan.conflicts.isEmpty()) {
-                        val imported = PlaylistTextCodec.createPlaylist(plan.playlistName, plan.autoResolvedTrackIds)
-                        libraryViewModel.upsertPlaylist(imported) { success, message ->
-                            playlistMessage = if (success) {
-                                "Lista '${plan.playlistName}' importada correctamente (${plan.autoResolvedTrackIds.size} pistas)."
-                            } else {
-                                message
-                            }
-                        }
-                    } else {
-                        pendingImportPlan = plan
-                    }
-                }.onFailure {
-                    playlistMessage = "No se pudo importar la lista: ${it.localizedMessage ?: "error desconocido"}"
-                }
-            }
-        }
-    }
-    val restoreBackupFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            coroutineScope.launch {
-                runCatching {
-                    val content = withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(uri)
-                            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                            ?: error("No se pudo leer la copia seleccionada.")
-                    }
-                    val backup = AutoBackupCodec.decode(content)
-                    val currentTracks = libraryViewModel.tracks.value
-                    val currentPlaylists = libraryViewModel.playlists.value
-                    val restored = AutoBackupCodec.toPlaylists(backup, currentTracks)
-                    val merged = AutoBackupCodec.merge(currentPlaylists, restored)
-                    val added = merged.size - currentPlaylists.size
-                    if (added <= 0) {
-                        playlistMessage = "La copia no añadió listas nuevas."
-                    } else {
-                        libraryViewModel.replacePlaylists(merged) { success, message ->
-                            playlistMessage = if (success) {
-                                "Se restauraron $added listas desde la copia."
-                            } else {
-                                message
-                            }
-                        }
-                    }
-                }.onFailure {
-                    playlistMessage = "No se pudo restaurar la copia: ${it.localizedMessage ?: "error desconocido"}"
-                }
-            }
-        }
-    }
-    val storedOutputProfileId by container.audioOutputProfileSettings.profileId.collectAsStateWithLifecycle(
-        initialValue = AudioOutputProfileIds.STUDIO_MONITOR
-    )
-    val tracksByIdLong = remember(tracks) { tracks.associateBy { it.id } }
-    val playlistsById = remember(playlists) { playlists.associateBy { it.id } }
     val audioGranted = hasAudioPermission()
 
     LaunchedEffect(customEqPresets) {
@@ -560,10 +487,10 @@ fun MusicaRoot(
         }
     }
 
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && audioGranted) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && audioGranted) {
                 libraryViewModel.verifyAndSyncAudioMismatch()
             }
         }
@@ -593,1383 +520,471 @@ fun MusicaRoot(
         onDispose { playbackViewModel.detachController() }
     }
 
+    val downloadFolderLabel = downloadSettingsState.outputFolderUri?.let { rawUri ->
+        Uri.parse(rawUri).lastPathSegment.orEmpty()
+            .substringAfter(':')
+            .substringAfterLast('/')
+    }
+
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
-    Box(Modifier.fillMaxSize()) {
-        if (themeSettings.wallpaperUri.isNotBlank()) {
-            AsyncImage(
-                model = themeSettings.wallpaperUri,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().blur(themeSettings.blurDp.dp),
-                contentScale = ContentScale.Crop
-            )
-            Box(
-                Modifier.fillMaxSize().background(Color.Black.copy(alpha = themeSettings.dimAmount))
-            )
-        } else {
-            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
-        }
-
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = Color.Transparent,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "MUSICA PARA LOS OIDOS",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.1.sp
-                    )
-                },
-                actions = {
-                    if (selectedTab == AppTab.Home) {
-                        UpdateCircleButton(viewModel = updateViewModel)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+        Box(Modifier.fillMaxSize()) {
+            if (themeSettings.wallpaperUri.isNotBlank()) {
+                AsyncImage(
+                    model = themeSettings.wallpaperUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().blur(themeSettings.blurDp.dp),
+                    contentScale = ContentScale.Crop
                 )
-            )
-        },
-        bottomBar = {
-            Column {
-                nowPlaying?.let { track ->
-                    MiniPlayer(
-                        track = track,
-                        playing = isPlaying,
-                        onOpen = { showPlayer = true },
-                        onPlayPause = { playbackViewModel.togglePlayPause() },
-                        onNext = { playbackViewModel.next() },
-                        progress = { (position / duration).coerceIn(0f, 1f) }
-                    )
-                }
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                    tonalElevation = 0.dp
-                ) {
-                    AppTab.visibleTabs.forEach { tab ->
-                        val icon = when (tab) {
-                            AppTab.Home -> Icons.Default.MusicNote
-                            AppTab.Library -> Icons.AutoMirrored.Filled.QueueMusic
-                            AppTab.Download -> Icons.Default.Download
-                            AppTab.Equalizer -> Icons.Default.Tune
-                            AppTab.Settings -> Icons.Default.Palette
-                        }
-                        NavigationBarItem(
-                            selected = selectedTab == tab,
-                            onClick = {
-                                selectedTabName = tab.name
-                                showPlayer = false
-                            },
-                            icon = { Icon(icon, contentDescription = null) },
-                            label = {
-                                Text(
-                                    tab.label,
-                                    maxLines = 1,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = Color.Transparent
-                            )
-                        )
-                    }
-                }
+                Box(
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = themeSettings.dimAmount))
+                )
+            } else {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
             }
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            when (selectedTab) {
-                AppTab.Home -> {
-                    item {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = 2.dp, bottom = 4.dp)
-                        ) {
+
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Color.Transparent,
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                topBar = {
+                    TopAppBar(
+                        title = {
                             Text(
-                                "Inicio",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        }
-                    }
-
-                    val featuredTrack = nowPlaying ?: tracks.firstOrNull()
-                    if (featuredTrack != null) {
-                        item {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { playTrackAndUpdateRecent(featuredTrack, tracks) },
-                                shape = MusicaStyle.Shape.large,
-                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                            ) {
-                                Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(180.dp)
-                                            .clip(MusicaStyle.Shape.row)
-                                    ) {
-                                        if (featuredTrack.artworkUri != null) {
-                                            AsyncImage(
-                                                model = featuredTrack.artworkUri,
-                                                contentDescription = "Portada de ${featuredTrack.album}",
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentScale = ContentScale.Crop
-                                            )
-                                        } else {
-                                            Box(
-                                                Modifier
-                                                    .fillMaxSize()
-                                                    .background(MaterialTheme.colorScheme.surface),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.LibraryMusic,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(54.dp),
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-
-                                        // Degradado transparente
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        colors = listOf(Color.Transparent, MusicaStyle.Colors.scrim)
-                                                    )
-                                                )
-                                        )
-                                    }
-
-                                    Column(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 10.dp)
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                featuredTrack.title,
-                                                fontWeight = FontWeight.Bold,
-                                                maxLines = 1,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                modifier = Modifier.weight(1f, fill = false)
-                                            )
-                                        }
-                                        Text(
-                                            featuredTrack.artist,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 1. Pistas Recientes (hasta 3)
-                    val recentTracks = recentTrackIds.mapNotNull { id -> tracksByIdLong[id] }
-                    val displayTracks = if (recentTracks.isNotEmpty()) recentTracks.take(3) else tracks.take(3)
-
-                    item {
-                        Text(
-                            "Pistas Recientes",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                        )
-                    }
-
-                    if (tracks.isEmpty()) {
-                        item {
-                            EmptyLibrary(
-                                hasPermission = hasAudioPermission(),
-                                message = scanMessage,
-                                onScan = {
-                                    if (!hasAudioPermission()) requestAudioPermission()
-                                    else libraryViewModel.refreshLibrary(force = true)
-                                }
-                            )
-                        }
-                    } else {
-                        items(displayTracks, key = { "home-track-${it.id}" }) { track ->
-                            val cat = catalogMap[track.uri]
-                            val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
-                            TrackRow(
-                                track = track,
-                                onClick = { playTrackAndUpdateRecent(track, tracks) },
-                                isLinked = isLinked,
-                                trackerColor = trackerCircleColor,
-                                onTrackerClick = { selectedTrackForLinks = track }
-                            )
-                        }
-                    }
-
-                    // 2. Listas de Reproducción Recientes (hasta 3)
-                    val recentPlaylists = recentPlaylistIds.mapNotNull { id -> playlistsById[id] }
-                    val displayPlaylists = if (recentPlaylists.isNotEmpty()) recentPlaylists.take(3) else playlists.take(3)
-
-                    if (displayPlaylists.isNotEmpty()) {
-                        item {
-                            Text(
-                                "Listas Recientes",
-                                style = MaterialTheme.typography.titleMedium,
+                                "MÚSICA PARA LOS OÍDOS",
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+                                letterSpacing = 1.1.sp
                             )
-                        }
-
-                        items(displayPlaylists, key = { "home-playlist-${it.id}" }) { playlist ->
-                            PlaylistGalleryCard(
-                                playlist = playlist,
-                                allTracksById = tracksByIdLong,
-                                onClick = {
-                                    selectedPlaylistId = playlist.id
-                                    libraryViewModel.setLibrarySubTab("Listas")
-                                    selectedTabName = AppTab.Library.name
-                                    updateRecentPlaylists(playlist.id)
-                                },
-                                onPlay = { plTracks ->
-                                    if (plTracks.isNotEmpty()) {
-                                        playTrackAndUpdateRecent(plTracks.first(), plTracks)
-                                        updateRecentPlaylists(playlist.id)
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    playbackError?.let { error ->
-                        item { Text(error, color = MaterialTheme.colorScheme.error) }
-                    }
-                }
-
-                AppTab.Library -> {
-                    item {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            SectionTitle("Biblioteca", "${filteredTracks.size} de ${tracks.size} pistas")
-                            IconButton(
-                                onClick = {
-                                    if (!hasAudioPermission()) requestAudioPermission()
-                                    else libraryViewModel.refreshLibrary(force = true)
-                                }
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Actualizar biblioteca", tint = MaterialTheme.colorScheme.primary)
+                        },
+                        actions = {
+                            if (selectedTab == AppTab.Home) {
+                                UpdateCircleButton(viewModel = updateViewModel)
                             }
-                        }
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf("Pistas", "Álbumes", "Listas", "Carpetas").forEach { section ->
-                                FilterChip(
-                                    selected = librarySubTab == section,
-                                    onClick = {
-                                        libraryViewModel.setLibrarySubTab(section)
-                                        if (section == "Carpetas") {
-                                            selectedFolderPath = null
-                                        }
-                                    },
-                                    label = { Text(section, maxLines = 1, softWrap = false) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                        selectedLabelColor = Color.Black
-                                    )
-                                )
-                            }
-                        }
-                    }
-
-                    if (librarySubTab == "Álbumes") {
-                        if (albums.isEmpty()) {
-                            item { Text("No hay álbumes disponibles en la biblioteca.") }
-                        } else {
-                            items(albums, key = { "album-${it.first}" }) { (albumName, albumTracks) ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth().clickable {
-                                        playTrackAndUpdateRecent(albumTracks.first(), albumTracks)
-                                    },
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                                ) {
-                                    Row(
-                                        Modifier.fillMaxWidth().padding(14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.LibraryMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                        Spacer(Modifier.width(10.dp))
-                                        Column(Modifier.weight(1f)) {
-                                            Text(albumName, fontWeight = FontWeight.Bold)
-                                            Text(
-                                                "${albumTracks.size} pistas · ${albumTracks.first().artist}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        Icon(Icons.Default.PlayArrow, contentDescription = "Reproducir álbum")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (librarySubTab == "Carpetas") {
-                        if (selectedFolderPath == null) {
-                            item {
-                                Text(
-                                    "Fuentes y Carpetas de Audio",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                )
-                            }
-                            if (folderItems.isEmpty()) {
-                                item {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                                    ) {
-                                        Column(
-                                            Modifier.fillMaxWidth().padding(24.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Text("No se detectaron fuentes de audio.", style = MaterialTheme.typography.bodyMedium)
-                                            Spacer(Modifier.height(8.dp))
-                                            Button(onClick = { coroutineScope.launch { libraryViewModel.refreshLibrary(force = true) } }) {
-                                                Text("Escanear almacenamiento")
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                items(folderItems, key = { "folder-${it.path}" }) { folder ->
-                                    FolderRow(
-                                        folder = folder,
-                                        onClick = { selectedFolderPath = folder.path },
-                                        onToggleHidden = { hidden ->
-                                            libraryViewModel.setFolderHidden(folder.path, hidden)
-                                        }
-                                    )
-                                }
-                            }
-                        } else {
-                            val currentFolder = folderItems.firstOrNull { it.path == selectedFolderPath }
-                            item {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = MusicaStyle.Shape.row,
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                    border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
-                                ) {
-                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        var detailFolderMenuExpanded by remember { mutableStateOf(false) }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(onClick = { selectedFolderPath = null }) {
-                                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                                            }
-                                            Spacer(Modifier.width(8.dp))
-                                            Column(Modifier.weight(1f)) {
-                                                Text(
-                                                    currentFolder?.name ?: "Carpeta",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                                Text(
-                                                    "${selectedFolderTracks.size} canciones • $selectedFolderPath",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    maxLines = 1
-                                                )
-                                            }
-                                            Box {
-                                                IconButton(onClick = { detailFolderMenuExpanded = true }) {
-                                                    Icon(Icons.Default.MoreVert, contentDescription = "Opciones de carpeta", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
-                                                DropdownMenu(
-                                                    expanded = detailFolderMenuExpanded,
-                                                    onDismissRequest = { detailFolderMenuExpanded = false },
-                                                    modifier = Modifier.background(MusicaStyle.Colors.menuBackgroundAlt)
-                                                ) {
-                                                    val isHidden = currentFolder?.isHidden == true
-                                                    DropdownMenuItem(
-                                                        text = {
-                                                            Text(
-                                                                if (isHidden) "Mostrar carpeta" else "Ocultar carpeta",
-                                                                color = if (isHidden) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                                            )
-                                                        },
-                                                        leadingIcon = {
-                                                            Icon(
-                                                                if (isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                                                contentDescription = null,
-                                                                tint = if (isHidden) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                                            )
-                                                        },
-                                                        onClick = {
-                                                            detailFolderMenuExpanded = false
-                                                            if (currentFolder != null) {
-                                                                libraryViewModel.setFolderHidden(currentFolder.path, !isHidden)
-                                                            }
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Button(
-                                            onClick = {
-                                                if (selectedFolderTracks.isNotEmpty()) playTrackAndUpdateRecent(selectedFolderTracks.first(), selectedFolderTracks)
-                                            },
-                                            enabled = selectedFolderTracks.isNotEmpty(),
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("Reproducir carpeta")
-                                        }
-                                    }
-                                }
-                            }
-                            items(selectedFolderTracks, key = { "fld-trk-${it.id}" }) { track ->
-                                val cat = catalogMap[track.uri]
-                                val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
-                                TrackRow(
-                                    track = track,
-                                    onClick = { playTrackAndUpdateRecent(track, selectedFolderTracks) },
-                                    isLinked = isLinked,
-                                    trackerColor = trackerCircleColor,
-                                    onTrackerClick = { selectedTrackForLinks = track }
-                                )
-                            }
-                        }
-                    }
-
-                    if (librarySubTab == "Listas") {
-                        val activePlaylist = selectedPlaylistForDetail
-                        if (activePlaylist != null) {
-                            item {
-                                PlaylistDetailHeader(
-                                    playlist = activePlaylist,
-                                    allTracksById = tracksByIdLong,
-                                    onBack = { selectedPlaylistId = null },
-                                    onPlayAll = { playlistTracks ->
-                                        if (playlistTracks.isNotEmpty()) playTrackAndUpdateRecent(playlistTracks.first(), playlistTracks)
-                                    },
-                                    onShuffle = { playlistTracks ->
-                                        if (playlistTracks.isNotEmpty()) {
-                                            val shuffled = playlistTracks.shuffled()
-                                            playTrackAndUpdateRecent(shuffled.first(), shuffled)
-                                        }
-                                    },
-                                    onAddSongsClick = { showAddTracksDialog = true },
-                                    onDeletePlaylist = {
-                                        libraryViewModel.deletePlaylist(activePlaylist.id) { message ->
-                                            selectedPlaylistId = null
-                                            playlistMessage = message
-                                        }
-                                    },
-                                    onPickCover = { pickPlaylistCover.launch(arrayOf("image/*")) },
-                                    onClearCover = {
-                                        libraryViewModel.upsertPlaylist(activePlaylist.copy(coverUri = null)) { _, _ -> }
-                                    }
-                                )
-                            }
-                            val playlistTracks = activePlaylist.trackIds.mapNotNull(tracksByIdLong::get)
-                            val playlistTrackPositions = activePlaylist.trackIds.withIndex().associate { it.value to it.index }
-                            if (playlistTracks.isEmpty()) {
-                                item {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            "Esta lista no tiene canciones aún.\nToca 'Añadir canciones' para incluir música.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                        )
-                                    }
-                                }
-                            } else {
-                                items(playlistTracks, key = { "pl-trk-${it.id}" }) { track ->
-                                    val trackIndex = playlistTrackPositions[track.id] ?: 0
-                                    PlaylistTrackRow(
-                                        index = trackIndex + 1,
-                                        track = track,
-                                        isCurrent = nowPlaying?.id == track.id,
-                                        canMoveUp = trackIndex > 0,
-                                        canMoveDown = trackIndex >= 0 && trackIndex < activePlaylist.trackIds.lastIndex,
-                                        onPlay = { playTrackAndUpdateRecent(track, playlistTracks) },
-                                        onMoveUp = {
-                                            libraryViewModel.movePlaylistTrack(
-                                                activePlaylist.id,
-                                                track.id,
-                                                -1
-                                            ) { playlistMessage = it }
-                                        },
-                                        onMoveDown = {
-                                            libraryViewModel.movePlaylistTrack(
-                                                activePlaylist.id,
-                                                track.id,
-                                                1
-                                            ) { playlistMessage = it }
-                                        },
-                                        onRemove = {
-                                            libraryViewModel.removePlaylistTrack(
-                                                activePlaylist.id,
-                                                track.id
-                                            ) { playlistMessage = it }
-                                        }
-                                    )
-                                }
-                            }
-                        } else {
-                            item {
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text("Tus listas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                        Text("${playlists.size} listas creadas", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    Button(onClick = { showNewPlaylistDialog = true }) {
-                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Nueva lista")
-                                    }
-                                }
-                            }
-                            playlistMessage?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
-                            if (playlists.isEmpty()) {
-                                item {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("Crea una lista para organizar tus pistas.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            } else {
-                                items(playlists, key = { "playlist-${it.id}" }) { playlist ->
-                                    PlaylistGalleryCard(
-                                        playlist = playlist,
-                                        allTracksById = tracksByIdLong,
-                                        onClick = { selectedPlaylistId = playlist.id },
-                                        onPlay = { plTracks ->
-                                            if (plTracks.isNotEmpty()) playTrackAndUpdateRecent(plTracks.first(), plTracks)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (librarySubTab == "Pistas") {
-                    // Buscador en tiempo real
-                    item {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { libraryViewModel.setSearchQuery(it) },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Buscar pistas, artistas o albumes...", fontSize = 13.sp) },
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                            trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { libraryViewModel.setSearchQuery("") }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Limpiar busqueda")
-                                    }
-                                }
-                            },
-                            singleLine = true,
-                            shape = MusicaStyle.Shape.medium,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MusicaStyle.Colors.overlay,
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                            )
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background
                         )
-                    }
-
-                    // Barra de orden alfabetico y filtros
-                    item {
-                        LazyRow(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            item {
-                                Text("Orden:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            items(SortOrder.entries, key = { it.name }) { order ->
-                                FilterChip(
-                                    selected = currentSortOrder == order,
-                                    onClick = { libraryViewModel.setSortOrder(order) },
-                                    label = { Text(order.label, fontSize = 12.sp) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                        selectedLabelColor = Color.Black
-                                    )
-                                )
-                            }
-                        }
-                    }
-
-                    // Jump bar alfabetico horizontal
-                    item {
-                        LazyRow(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            item {
-                                SuggestionChip(
-                                    onClick = { libraryViewModel.setLetterFilter(null) },
-                                    label = { Text("Todos", fontSize = 11.sp) },
-                                    colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = if (selectedLetterFilter == null) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.borderStrong,
-                                        labelColor = if (selectedLetterFilter == null) Color.Black else Color.White
-                                    ),
-                                    border = null
-                                )
-                            }
-                            items(('A'..'Z').toList() + '#') { char ->
-                                val isSelected = selectedLetterFilter == char
-                                SuggestionChip(
-                                    onClick = {
-                                        libraryViewModel.setLetterFilter(if (isSelected) null else char)
-                                    },
-                                    label = { Text(char.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                    colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MusicaStyle.Colors.border,
-                                        labelColor = if (isSelected) Color.Black else Color.White
-                                    ),
-                                    border = null
-                                )
-                            }
-                        }
-                    }
-
-                    if (scanMessage != null) {
-                        item { Text(scanMessage!!, color = MaterialTheme.colorScheme.secondary) }
-                    }
-
-                    if (filteredTracks.isEmpty()) {
-                        item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                            ) {
-                                Column(
-                                    Modifier.fillMaxWidth().padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text("No se encontraron pistas con el filtro actual.", style = MaterialTheme.typography.bodyMedium)
-                                }
-                            }
-                        }
-                    } else {
-                        items(filteredTracks, key = { "lib-${it.id}" }) { track ->
-                            val cat = catalogMap[track.uri]
-                            val isLinked = !cat?.youtubeUrl.isNullOrBlank() || (cat?.lrcSynced == true) || !cat?.lrcPath.isNullOrBlank() || container.trackTrackerManager.hasLocalLrcFile(track)
-                            TrackRow(
-                                track = track,
-                                onClick = { playTrackAndUpdateRecent(track, filteredTracks) },
-                                isLinked = isLinked,
-                                trackerColor = trackerCircleColor,
-                                onTrackerClick = { selectedTrackForLinks = track }
-                            )
-                        }
-                    }
-                    }
-
-                    playbackError?.let { error ->
-                        item { Text(error, color = MaterialTheme.colorScheme.error) }
-                    }
-                }
-
-                AppTab.Download -> {
-                    item {
-                        DownloaderScreen(viewModel = downloaderViewModel)
-                    }
-                }
-
-                AppTab.Equalizer -> {
-                    item {
-                        EqualizerScreenContent(
-                            controller = controller,
-                            onOutputProfileSelected = ::saveOutputProfile,
-                            outputProfileMessage = audioOutputProfileMessage,
-                            onSaveCustomPreset = { preset ->
-                                libraryViewModel.saveCustomEqPreset(preset) { themeMessage = it }
-                            },
-                            initialMediaVolume = mediaVolume,
-                            onMediaVolumeChange = { vol ->
-                                coroutineScope.launch { container.preferences.saveMediaVolume(vol) }
-                            },
-                            onPersistEqSettings = {
-                                coroutineScope.launch {
-                                    container.preferences.saveEqEnabled(AudioEffectsManager.isEnabled.value)
-                                    container.preferences.saveActiveEqPreset(AudioEffectsManager.selectedPreset.value)
-                                    container.preferences.saveEqBands(AudioEffectsManager.bands.value)
-                                    container.preferences.saveBassBoost(AudioEffectsManager.bassStrength.value)
-                                    container.preferences.saveVirtualizer(AudioEffectsManager.virtualizerStrength.value)
-                                    container.preferences.saveSpeakerBoost(AudioEffectsManager.speakerBoost.value)
-                                }
-                            }
-                        )
-                    }
-                }
-
-                AppTab.Settings -> {
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                "Ajustes",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                            Text(
-                                "Apariencia, letras y copias de seguridad.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                    item {
-                        ThemeSettingsSection(
-                            savedSettings = themeSettings,
-                            onSave = { settings ->
-                                libraryViewModel.saveThemeSettings(settings) { themeMessage = it }
-                            }
-                        )
-                    }
-                    item {
-                        LyricsSettingsSection(
-                            scrollSpeed = lyricsScrollSpeed,
-                            onScrollSpeedChange = { speed ->
-                                libraryViewModel.saveLyricsScrollSpeed(speed) { themeMessage = it }
-                            }
-                        )
-                    }
-                    // 1. Configuracion de Trackers y Descargas
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SectionTitle("Reproducción y Sonido", "Fundido entre canciones y perfiles de hardware.")
-
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MusicaStyle.Shape.row,
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                "Crossfade (Fundido entre canciones)",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                            Text(
-                                                if (crossfadeSeconds > 0) "$crossfadeSeconds segundos" else "Desactivado",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        listOf(0 to "Off", 2 to "2s", 4 to "4s", 6 to "6s", 8 to "8s", 10 to "10s").forEach { (sec, label) ->
-                                            FilterChip(
-                                                selected = crossfadeSeconds == sec,
-                                                onClick = {
-                                                    coroutineScope.launch {
-                                                        container.preferences.saveCrossfadeSeconds(sec)
-                                                    }
-                                                },
-                                                label = { Text(label) }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            SectionTitle("Trackers y Descargas", "Ajusta la intensidad, frecuencia y apariencia de vinculación y descargas.")
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MusicaStyle.Shape.row,
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    // Frecuencia de Tracker
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("Frecuencia de Tracker", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                            Text(when(trackerFrequency) {
-                                                "ON_APP_OPEN" -> "Al abrir la app"
-                                                "EVERY_6_HOURS" -> "Cada 6 horas"
-                                                "DAILY" -> "Diario"
-                                                "MANUAL_ONLY" -> "Solo manual"
-                                                else -> "Al añadir canciones"
-                                            }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        var freqExpanded by remember { mutableStateOf(false) }
-                                        Box {
-                                            OutlinedButton(onClick = { freqExpanded = true }) { Text("Cambiar") }
-                                            DropdownMenu(expanded = freqExpanded, onDismissRequest = { freqExpanded = false }) {
-                                                listOf(
-                                                    "ON_NEW_TRACKS_ONLY" to "Al añadir canciones",
-                                                    "ON_APP_OPEN" to "Al abrir la app",
-                                                    "EVERY_6_HOURS" to "Cada 6 horas",
-                                                    "DAILY" to "Diario",
-                                                    "MANUAL_ONLY" to "Solo manual"
-                                                ).forEach { (key, label) ->
-                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
-                                                        freqExpanded = false
-                                                        coroutineScope.launch { container.preferences.saveTrackerFrequency(key) }
-                                                    })
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Intensidad de Tracker
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("Intensidad de Tracker", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                            Text(when(trackerIntensity) {
-                                                "LOW" -> "Baja (ahorro batería/red)"
-                                                "HIGH" -> "Alta (rápida)"
-                                                else -> "Media (3 en lote)"
-                                            }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        var intExpanded by remember { mutableStateOf(false) }
-                                        Box {
-                                            OutlinedButton(onClick = { intExpanded = true }) { Text("Cambiar") }
-                                            DropdownMenu(expanded = intExpanded, onDismissRequest = { intExpanded = false }) {
-                                                listOf(
-                                                    "LOW" to "Baja (ahorro batería/red)",
-                                                    "MEDIUM" to "Media (3 en lote)",
-                                                    "HIGH" to "Alta (rápida)"
-                                                ).forEach { (key, label) ->
-                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
-                                                        intExpanded = false
-                                                        coroutineScope.launch { container.preferences.saveTrackerIntensity(key) }
-                                                    })
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Color del circulo del Tracker
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Text("Color del círculo del Tracker", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            listOf(
-                                                "#FFFFFF" to Color.White,
-                                                "#00E5FF" to Color(0xFF00E5FF),
-                                                "#00E676" to Color(0xFF00E676),
-                                                "#FFEA00" to Color(0xFFFFEA00),
-                                                "#E040FB" to Color(0xFFE040FB)
-                                            ).forEach { (hex, col) ->
-                                                val isSelected = trackerCircleColorHex.equals(hex, ignoreCase = true)
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(32.dp)
-                                                        .clip(CircleShape)
-                                                        .background(col)
-                                                        .border(
-                                                            width = if (isSelected) 3.dp else 1.dp,
-                                                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f),
-                                                            shape = CircleShape
-                                                        )
-                                                        .clickable {
-                                                            coroutineScope.launch { container.preferences.saveTrackerCircleColor(hex) }
-                                                        }
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    // Concurrencia de descargas
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Descargas simultáneas: $downloadConcurrency", style = MaterialTheme.typography.bodyMedium)
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            listOf(1, 2, 3).forEach { c ->
-                                                val sel = downloadConcurrency == c
-                                                Button(
-                                                    onClick = { coroutineScope.launch { container.preferences.saveDownloadConcurrency(c) } },
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                                        contentColor = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                                                    ),
-                                                    modifier = Modifier.size(38.dp),
-                                                    contentPadding = PaddingValues(0.dp)
-                                                ) {
-                                                    Text("$c", fontWeight = FontWeight.Bold)
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Divider(modifier = Modifier.padding(vertical = 4.dp))
-                                    // Selector de carpeta de descarga
-                                    val downloadSettingsState by container.downloadSettings.state.collectAsStateWithLifecycle(
-                                        initialValue = com.musica.paralosoidos.data.DownloadSettingsState(),
-                                        lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-                                    )
-                                    val downloadFolderLabel = downloadSettingsState.outputFolderUri?.let { rawUri ->
-                                        android.net.Uri.parse(rawUri).lastPathSegment.orEmpty()
-                                            .substringAfter(':')
-                                            .substringAfterLast('/')
-                                    }
-                                    val downloadFolderPicker = rememberLauncherForActivityResult(
-                                        ActivityResultContracts.OpenDocumentTree()
-                                    ) { uri ->
-                                        if (uri != null) {
-                                            try {
-                                                context.contentResolver.takePersistableUriPermission(
-                                                    uri,
-                                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                                                )
-                                                coroutineScope.launch {
-                                                    container.downloadSettings.saveOutputFolderUri(uri.toString())
-                                                }
-                                            } catch (error: SecurityException) {
-                                                playlistMessage = "No se pudo acceder a la carpeta: ${error.localizedMessage ?: "permiso denegado"}"
-                                            }
-                                        }
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                "Carpeta de descarga",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                            Text(
-                                                downloadFolderLabel?.let { "Actual: $it" } ?: "Sin configurar",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (downloadFolderLabel != null)
-                                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                                else
-                                                    MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                        OutlinedButton(
-                                            onClick = { downloadFolderPicker.launch(null) },
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text(if (downloadFolderLabel != null) "Cambiar" else "Elegir")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 2. Copia de Seguridad Centralizada
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SectionTitle("Copia de Seguridad Centralizada", "Exporta, restaura o sube a la nube todo el estado de la app.")
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MusicaStyle.Shape.row,
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OutlinedButton(
-                                        onClick = { exportCentralBackup.launch("musica-para-los-oidos-backup.json") },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Exportar copia completa (.zip)")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = { importCentralBackup.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Restaurar copia completa")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = { importThemesLauncher.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Importar Temas")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = { importPlaylistJson.launch(arrayOf("application/json", "text/*")) },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Importar lista de reproducción (.json)")
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                runCatching {
-                                                    val cacheFile = File(context.cacheDir, "musica-para-los-oidos-backup.zip")
-                                                    withContext(Dispatchers.IO) {
-                                                        cacheFile.outputStream().use { out ->
-                                                            container.centralBackupManager.exportZipBundle(out)
-                                                        }
-                                                    }
-                                                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                                                        context,
-                                                        "${context.packageName}.fileprovider",
-                                                        cacheFile
-                                                    )
-                                                    val driveIntent = container.centralBackupManager.createGoogleDriveIntent(uri)
-                                                    context.startActivity(driveIntent)
-                                                }.onFailure {
-                                                    playlistMessage = "No se pudo abrir Drive: ${it.localizedMessage ?: "error"}"
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Subir copia a Google Drive (App a App)")
-                                    }
-
-                                    // Intervalo de auto backup
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("Respaldo periódico automático", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                            Text(when(autoBackupInterval) {
-                                                "HOURLY" -> "Cada 1 hora"
-                                                "SIX_HOURS" -> "Cada 6 horas"
-                                                "OFF" -> "Desactivado"
-                                                else -> "Diario (24h)"
-                                            }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        var autoExpanded by remember { mutableStateOf(false) }
-                                        Box {
-                                            OutlinedButton(onClick = { autoExpanded = true }) { Text("Cambiar") }
-                                            DropdownMenu(expanded = autoExpanded, onDismissRequest = { autoExpanded = false }) {
-                                                listOf(
-                                                    "DAILY" to "Diario (24h)",
-                                                    "SIX_HOURS" to "Cada 6 horas",
-                                                    "HOURLY" to "Cada 1 hora",
-                                                    "OFF" to "Desactivado"
-                                                ).forEach { (key, label) ->
-                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
-                                                        autoExpanded = false
-                                                        coroutineScope.launch { container.preferences.saveAutoBackupInterval(key) }
-                                                    })
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    playlistMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
-                                }
-                            }
-                        }
-                    }
-
-                    // 3. Estadisticas de Trackers
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SectionTitle("Estadísticas de Trackers", "Resumen de canciones y letras vinculadas.")
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MusicaStyle.Shape.row,
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                border = BorderStroke(1.dp, MusicaStyle.Colors.overlay)
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    // Solo contar entradas que tienen una pista local correspondiente en la biblioteca actual
-                                    val localUris = tracks.map { it.uri }.toSet()
-                                    val activeCatalog = catalogTracks.filter { it.localUri != null && it.localUri in localUris }
-                                    val ytCount = activeCatalog.count { !it.youtubeUrl.isNullOrBlank() }
-                                    val lrcCount = activeCatalog.count { it.lrcSynced || !it.lrcPath.isNullOrBlank() }
-
-                                    Text("Canciones en biblioteca: ${tracks.size}", style = MaterialTheme.typography.bodyMedium)
-                                    Text("Vinculadas a YouTube: $ytCount / ${tracks.size}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                                    Text("Con letra LRC: $lrcCount / ${tracks.size}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-
-                                    if (trackerSyncProgress != null) {
-                                        val (cur, tot) = trackerSyncProgress!!
-                                        Text("Sincronizando: $cur / $tot...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            startTrackerSync(visibleTracks)
-                                        },
-                                        enabled = !isTrackerSyncing && visibleTracks.isNotEmpty(),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(if (isTrackerSyncing) "Sincronizando..." else "Sincronizar Trackers ahora")
-                                    }
-
-                                    if (isTrackerSyncing) {
-                                        OutlinedButton(
-                                            onClick = { trackerJob?.cancel() },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                contentColor = MaterialTheme.colorScheme.error
-                                            )
-                                        ) {
-                                            Icon(Icons.Default.Stop, contentDescription = null)
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("Detener Tracker")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    themeMessage?.let { message ->
-                        item { Text(message, color = MaterialTheme.colorScheme.error) }
-                    }
-                }
-            }
-        }
-    }
-    }
-
-    // Reproductor a pantalla completa sobre la raiz
-    if (showPlayer) {
-        nowPlaying?.let { currentTrack ->
-        FullPlayer(
-            track = currentTrack,
-            catalogEntry = catalogMap[currentTrack.uri],
-            queue = playbackQueue,
-            allTracks = tracks,
-            controller = controller,
-            playing = isPlaying,
-            position = { position },
-            duration = { duration },
-            shuffleEnabled = shuffleEnabled,
-            repeatMode = repeatMode,
-            playbackSpeed = playbackSpeed,
-            lyricsScrollSpeed = lyricsScrollSpeed,
-            onSpeedChange = { speed -> playbackViewModel.setSpeed(speed) },
-            error = playbackError,
-            onSelectQueueItem = { index -> playbackViewModel.seekTo(index) },
-            onMoveQueueItem = { from, to -> playbackViewModel.moveQueueItem(from, to) },
-            onRemoveQueueItem = { index -> playbackViewModel.removeQueueItem(index) },
-            onAddQueueItems = { selected -> playbackViewModel.addQueueItems(selected) },
-            onOpenLyricsSettings = {
-                showPlayer = false
-                selectedTabName = AppTab.Settings.name
-            },
-            onLinkLrcFromLrclib = { trackToLink ->
-                val fetchResult = container.trackTrackerManager.fetchLyricsWithUrl(trackToLink)
-                val lyrics = fetchResult?.syncedLyrics ?: fetchResult?.plainLyrics
-                if (!lyrics.isNullOrBlank()) {
-                    val savedFile = container.trackTrackerManager.downloadAndSaveLrc(
-                        track = trackToLink,
-                        lrcContent = lyrics,
-                        lrclibUrl = fetchResult?.lrclibUrl
                     )
-                    savedFile != null
-                } else {
-                    false
-                }
-            },
-            onClose = { showPlayer = false }
-        )
-        }
-    }
-
-    if (showNewPlaylistDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewPlaylistDialog = false },
-            title = { Text("Crear lista") },
-            text = {
-                OutlinedTextField(
-                    value = newPlaylistName,
-                    onValueChange = { newPlaylistName = it },
-                    label = { Text("Nombre") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = newPlaylistName.isNotBlank(),
-                    onClick = {
-                        val playlist = com.musica.paralosoidos.data.MusicPlaylist(
-                            id = java.util.UUID.randomUUID().toString(),
-                            name = newPlaylistName.trim(),
-                            trackIds = emptyList()
-                        )
-                        libraryViewModel.upsertPlaylist(playlist) { success, message ->
-                            if (success) {
-                                playlistMessage = null
-                                showNewPlaylistDialog = false
-                                newPlaylistName = ""
-                            } else {
-                                playlistMessage = message
+                },
+                bottomBar = {
+                    Column {
+                        nowPlaying?.let { track ->
+                            MiniPlayer(
+                                track = track,
+                                playing = isPlaying,
+                                onOpen = { showPlayer = true },
+                                onPlayPause = { playbackViewModel.togglePlayPause() },
+                                onNext = { playbackViewModel.next() },
+                                progress = { (position / duration).coerceIn(0f, 1f) }
+                            )
+                        }
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                            tonalElevation = 0.dp
+                        ) {
+                            AppTab.visibleTabs.forEach { tab ->
+                                val icon = when (tab) {
+                                    AppTab.Home -> Icons.Default.MusicNote
+                                    AppTab.Library -> Icons.AutoMirrored.Filled.QueueMusic
+                                    AppTab.Download -> Icons.Default.Download
+                                    AppTab.Equalizer -> Icons.Default.Tune
+                                    AppTab.Settings -> Icons.Default.Palette
+                                }
+                                NavigationBarItem(
+                                    selected = selectedTab == tab,
+                                    onClick = {
+                                        selectedTabName = tab.name
+                                        showPlayer = false
+                                    },
+                                    icon = { Icon(icon, contentDescription = null) },
+                                    label = {
+                                        Text(
+                                            tab.label,
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
                             }
                         }
                     }
+                }
+            ) { padding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
                 ) {
-                    Text("Crear")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewPlaylistDialog = false }) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
+                    when (selectedTab) {
+                        AppTab.Home -> HomeScreen(
+                            tracks = tracks,
+                            tracksByIdLong = tracksByIdLong,
+                            playlists = playlists,
+                            playlistsById = playlistsById,
+                            recentTrackIds = recentTrackIds,
+                            recentPlaylistIds = recentPlaylistIds,
+                            nowPlaying = nowPlaying,
+                            catalogMap = catalogMap,
+                            trackerCircleColor = trackerCircleColor,
+                            trackTrackerManager = container.trackTrackerManager,
+                            hasAudioPermission = hasAudioPermission,
+                            scanMessage = scanMessage,
+                            playbackError = playbackError,
+                            onRequestPermissionOrRefresh = {
+                                if (!hasAudioPermission()) requestAudioPermission()
+                                else libraryViewModel.refreshLibrary(force = true)
+                            },
+                            onPlayTrack = ::playTrackAndUpdateRecent,
+                            onOpenPlaylist = { playlist ->
+                                selectedPlaylistId = playlist.id
+                                libraryViewModel.setLibrarySubTab("Listas")
+                                selectedTabName = AppTab.Library.name
+                                updateRecentPlaylists(playlist.id)
+                            },
+                            onPlayPlaylist = { playlist, plTracks ->
+                                playTrackAndUpdateRecent(plTracks.first(), plTracks)
+                                updateRecentPlaylists(playlist.id)
+                            },
+                            onOpenTrackLinks = { selectedTrackForLinks = it },
+                            listState = homeListState
+                        )
 
-    if (showAddTracksDialog && selectedPlaylistForDetail != null) {
-        val activePl = selectedPlaylistForDetail!!
-        AddTracksToPlaylistDialog(
-            playlistName = activePl.name,
-            existingTrackIds = activePl.trackIds,
-            allTracks = tracks,
-            onDismiss = { showAddTracksDialog = false },
-            onAddTracks = { addedTracks ->
-                val updatedIds = (activePl.trackIds + addedTracks.map { it.id }).distinct()
-                val updatedPlaylist = activePl.copy(trackIds = updatedIds)
-                libraryViewModel.upsertPlaylist(updatedPlaylist) { success, message ->
-                    if (success) {
-                        selectedPlaylistId = updatedPlaylist.id
-                        showAddTracksDialog = false
-                        playlistMessage = "Se añadieron ${addedTracks.size} canciones a '${activePl.name}'."
-                    } else {
-                        playlistMessage = message
+                        AppTab.Library -> LibraryScreen(
+                            tracks = tracks,
+                            filteredTracks = filteredTracks,
+                            tracksByIdLong = tracksByIdLong,
+                            albums = albums,
+                            playlists = playlists,
+                            folderItems = folderItems,
+                            selectedFolderPath = selectedFolderPath,
+                            selectedFolderTracks = selectedFolderTracks,
+                            selectedPlaylistForDetail = selectedPlaylistForDetail,
+                            librarySubTab = librarySubTab,
+                            searchQuery = searchQuery,
+                            currentSortOrder = currentSortOrder,
+                            selectedLetterFilter = selectedLetterFilter,
+                            nowPlaying = nowPlaying,
+                            catalogMap = catalogMap,
+                            trackerCircleColor = trackerCircleColor,
+                            trackTrackerManager = container.trackTrackerManager,
+                            scanMessage = scanMessage,
+                            playlistMessage = playlistMessage,
+                            playbackError = playbackError,
+                            onRefreshLibrary = {
+                                if (!hasAudioPermission()) requestAudioPermission()
+                                else libraryViewModel.refreshLibrary(force = true)
+                            },
+                            onSelectSubTab = libraryViewModel::setLibrarySubTab,
+                            onSelectFolderPath = { selectedFolderPath = it },
+                            onToggleFolderHidden = libraryViewModel::setFolderHidden,
+                            onSelectPlaylist = { pl ->
+                                selectedPlaylistId = pl?.id
+                                if (pl != null) updateRecentPlaylists(pl.id)
+                            },
+                            onOpenNewPlaylistDialog = { showNewPlaylistDialog = true },
+                            onOpenAddTracksDialog = { showAddTracksDialog = true },
+                            onDeletePlaylist = { playlistId ->
+                                libraryViewModel.deletePlaylist(playlistId) { message ->
+                                    selectedPlaylistId = null
+                                    if (message != null) showFeedback(message)
+                                }
+                            },
+                            onPickPlaylistCover = { pickPlaylistCover.launch(arrayOf("image/*")) },
+                            onClearPlaylistCover = { pl ->
+                                libraryViewModel.upsertPlaylist(pl.copy(coverUri = null)) { _, _ -> }
+                            },
+                            onMovePlaylistTrack = { plId, trkId, delta ->
+                                libraryViewModel.movePlaylistTrack(plId, trkId, delta) { msg ->
+                                    if (msg != null) showFeedback(msg)
+                                }
+                            },
+                            onRemovePlaylistTrack = { plId, trkId ->
+                                libraryViewModel.removePlaylistTrack(plId, trkId) { msg ->
+                                    if (msg != null) showFeedback(msg)
+                                }
+                            },
+                            onPlayTrack = ::playTrackAndUpdateRecent,
+                            onPlayPlaylist = { pl, track, list ->
+                                playTrackAndUpdateRecent(track, list)
+                                updateRecentPlaylists(pl.id)
+                            },
+                            onSearchQueryChange = libraryViewModel::setSearchQuery,
+                            onSortOrderChange = libraryViewModel::setSortOrder,
+                            onLetterFilterChange = libraryViewModel::setLetterFilter,
+                            onOpenTrackLinks = { selectedTrackForLinks = it },
+                            listState = libraryListState
+                        )
+
+                        AppTab.Download -> DownloaderScreen(
+                            viewModel = downloaderViewModel,
+                            onPickOutputFolder = { downloadFolderPicker.launch(null) },
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+
+                        AppTab.Equalizer -> Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            EqualizerScreenContent(
+                                controller = controller,
+                                onOutputProfileSelected = ::saveOutputProfile,
+                                outputProfileMessage = audioOutputProfileMessage,
+                                onSaveCustomPreset = { preset ->
+                                    libraryViewModel.saveCustomEqPreset(preset) { themeMessage = it }
+                                },
+                                initialMediaVolume = mediaVolume,
+                                onMediaVolumeChange = { vol ->
+                                    coroutineScope.launch { container.preferences.saveMediaVolume(vol) }
+                                },
+                                initialEqEnabled = eqEnabled,
+                                initialPresetName = activeEqPreset,
+                                initialEqBands = eqBands,
+                                initialBassBoost = bassBoost,
+                                initialVirtualizer = virtualizer,
+                                initialSpeakerBoost = speakerBoost,
+                                onEqStateChange = { enabled, preset, bands, bass, virt, spk ->
+                                    coroutineScope.launch {
+                                        container.preferences.saveEqState(enabled, preset, bands, bass, virt, spk)
+                                    }
+                                },
+                                customPresets = customEqPresets,
+                                savedProfileId = storedOutputProfileId
+                            )
+                        }
+
+                        AppTab.Settings -> SettingsScreen(
+                            themeSettings = themeSettings,
+                            lyricsScrollSpeed = lyricsScrollSpeed,
+                            crossfadeSeconds = crossfadeSeconds,
+                            trackerFrequency = trackerFrequency,
+                            trackerIntensity = trackerIntensity,
+                            trackerCircleColorHex = trackerCircleColorHex,
+                            downloadConcurrency = downloadConcurrency,
+                            downloadFolderLabel = downloadFolderLabel,
+                            autoBackupInterval = autoBackupInterval,
+                            tracks = tracks,
+                            visibleTracks = visibleTracks,
+                            catalogTracks = catalogTracks,
+                            trackerSyncProgress = trackerSyncProgress,
+                            isTrackerSyncing = isTrackerSyncing,
+                            themeMessage = themeMessage,
+                            onSaveThemeSettings = { settings ->
+                                libraryViewModel.saveThemeSettings(settings) { themeMessage = it }
+                            },
+                            onSaveLyricsScrollSpeed = { speed ->
+                                libraryViewModel.saveLyricsScrollSpeed(speed) { themeMessage = it }
+                            },
+                            onSaveCrossfadeSeconds = { sec ->
+                                coroutineScope.launch { container.preferences.saveCrossfadeSeconds(sec) }
+                            },
+                            onSaveTrackerFrequency = { key ->
+                                coroutineScope.launch { container.preferences.saveTrackerFrequency(key) }
+                            },
+                            onSaveTrackerIntensity = { key ->
+                                coroutineScope.launch { container.preferences.saveTrackerIntensity(key) }
+                            },
+                            onSaveTrackerCircleColor = { hex ->
+                                coroutineScope.launch { container.preferences.saveTrackerCircleColor(hex) }
+                            },
+                            onSaveDownloadConcurrency = { c ->
+                                coroutineScope.launch { container.preferences.saveDownloadConcurrency(c) }
+                            },
+                            onPickDownloadFolder = { downloadFolderPicker.launch(null) },
+                            onPinWidget = {
+                                val pinned = MusicWidgetProvider.requestPin(context)
+                                if (!pinned) {
+                                    showFeedback("Tu launcher no permite fijar widgets desde la app. Añádelo desde el escritorio.")
+                                }
+                            },
+                            onExportCentralBackup = {
+                                exportCentralBackup.launch("musica-para-los-oidos-backup.zip")
+                            },
+                            onImportCentralBackup = {
+                                importCentralBackup.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*"))
+                            },
+                            onImportThemes = {
+                                importThemesLauncher.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*"))
+                            },
+                            onImportPlaylistJson = {
+                                importPlaylistJson.launch(arrayOf("application/json", "text/*"))
+                            },
+                            onUploadDriveBackup = {
+                                coroutineScope.launch {
+                                    runCatching {
+                                        val cacheFile = File(context.cacheDir, "musica-para-los-oidos-backup.zip")
+                                        withContext(Dispatchers.IO) {
+                                            cacheFile.outputStream().use { out ->
+                                                container.centralBackupManager.exportZipBundle(out)
+                                            }
+                                        }
+                                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            cacheFile
+                                        )
+                                        val driveIntent = container.centralBackupManager.createGoogleDriveIntent(uri)
+                                        context.startActivity(driveIntent)
+                                    }.onFailure {
+                                        showFeedback("No se pudo abrir Drive: ${it.localizedMessage ?: "error"}")
+                                    }
+                                }
+                            },
+                            onSaveAutoBackupInterval = { key ->
+                                coroutineScope.launch { container.preferences.saveAutoBackupInterval(key) }
+                            },
+                            onStartTrackerSync = { startTrackerSync(visibleTracks) },
+                            onStopTrackerSync = { trackerJob?.cancel() },
+                            listState = settingsListState
+                        )
                     }
                 }
             }
-        )
-    }
 
-    pendingImportPlan?.let { plan ->
-        PlaylistImportConflictDialog(
-            plan = plan,
-            onDismiss = { pendingImportPlan = null },
-            onConfirm = { resolvedTrackIds ->
-                val newPlaylist = PlaylistTextCodec.createPlaylist(plan.playlistName, resolvedTrackIds)
-                libraryViewModel.upsertPlaylist(newPlaylist) { success, message ->
-                    if (success) {
-                        playlistMessage = "Lista '${plan.playlistName}' importada con ${resolvedTrackIds.size} canciones."
-                        pendingImportPlan = null
-                    } else {
-                        playlistMessage = message
+            AnimatedVisibility(
+                visible = showPlayer && nowPlaying != null,
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it })
+            ) {
+                nowPlaying?.let { currentTrack ->
+                    FullPlayer(
+                        track = currentTrack,
+                        catalogEntry = catalogMap[currentTrack.uri],
+                        queue = playbackQueue,
+                        allTracks = tracks,
+                        controller = controller,
+                        playing = isPlaying,
+                        position = { position },
+                        duration = { duration },
+                        shuffleEnabled = shuffleEnabled,
+                        repeatMode = repeatMode,
+                        playbackSpeed = playbackSpeed,
+                        lyricsScrollSpeed = lyricsScrollSpeed,
+                        onSpeedChange = { speed -> playbackViewModel.setSpeed(speed) },
+                        error = playbackError,
+                        onSelectQueueItem = { index -> playbackViewModel.seekTo(index) },
+                        onMoveQueueItem = { from, to -> playbackViewModel.moveQueueItem(from, to) },
+                        onRemoveQueueItem = { index -> playbackViewModel.removeQueueItem(index) },
+                        onAddQueueItems = { selected -> playbackViewModel.addQueueItems(selected) },
+                        onOpenLyricsSettings = {
+                            showPlayer = false
+                            selectedTabName = AppTab.Settings.name
+                        },
+                        onLinkLrcFromLrclib = { trackToLink ->
+                            val fetchResult = container.trackTrackerManager.fetchLyricsWithUrl(trackToLink)
+                            val lyrics = fetchResult?.syncedLyrics ?: fetchResult?.plainLyrics
+                            if (!lyrics.isNullOrBlank()) {
+                                val savedFile = container.trackTrackerManager.downloadAndSaveLrc(
+                                    track = trackToLink,
+                                    lrcContent = lyrics,
+                                    lrclibUrl = fetchResult?.lrclibUrl
+                                )
+                                savedFile != null
+                            } else {
+                                false
+                            }
+                        },
+                        onClose = { showPlayer = false }
+                    )
+                }
+            }
+
+            UpdateDialog(viewModel = updateViewModel)
+
+            MusicaDialogs(
+                showNewPlaylistDialog = showNewPlaylistDialog,
+                newPlaylistName = newPlaylistName,
+                onNewPlaylistNameChange = { newPlaylistName = it },
+                onDismissNewPlaylist = { showNewPlaylistDialog = false },
+                onCreatePlaylist = { name ->
+                    val playlist = MusicPlaylist(
+                        id = UUID.randomUUID().toString(),
+                        name = name,
+                        trackIds = emptyList()
+                    )
+                    libraryViewModel.upsertPlaylist(playlist) { success, message ->
+                        if (success) {
+                            showNewPlaylistDialog = false
+                            newPlaylistName = ""
+                            updateRecentPlaylists(playlist.id)
+                        } else if (message != null) {
+                            showFeedback(message)
+                        }
                     }
-                }
-            }
-        )
-    }
-
-    UpdateDialog(viewModel = updateViewModel)
-
-    // BottomSheet para ver / editar vinculos de la pista (YouTube & LRC Tracker)
-    @OptIn(ExperimentalMaterial3Api::class)
-    val linksSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    if (selectedTrackForLinks != null) {
-        val currentTrack = selectedTrackForLinks!!
-        val catalogEntry = catalogMap[currentTrack.uri]
-        TrackLinksBottomSheet(
-            track = currentTrack,
-            catalogEntry = catalogEntry,
-            sheetState = linksSheetState,
-            onDismiss = { selectedTrackForLinks = null },
-            onSave = { ytUrl, lrcPath, lrcSynced, lrclibUrl ->
-                coroutineScope.launch {
-                    container.saveTrackLinks(currentTrack, ytUrl, lrcPath, lrcSynced, lrclibUrl)
-                }
-            },
-            onAutoSearchYouTube = {
-                container.trackTrackerManager.searchYouTubeCandidate(
-                    currentTrack,
-                    allowSuspiciousTitle = true
-                )
-            },
-            onAutoSearchLrcDetailed = {
-                container.trackTrackerManager.fetchLyricsWithUrl(currentTrack)
-            },
-            onDownloadLrc = { lrcContent, lrclibUrl ->
-                container.trackTrackerManager.downloadAndSaveLrc(currentTrack, lrcContent, lrclibUrl) != null
-            },
-            onUnlink = {
-                coroutineScope.launch {
-                    container.saveTrackLinks(currentTrack, null, null, false, null)
-                }
-            }
-        )
-    }
-
-    // Dialogo para restaurar pistas faltantes del respaldo en este dispositivo
-    if (missingTracksFromBackup != null) {
-        val missing = missingTracksFromBackup!!
-        AlertDialog(
-            onDismissRequest = { missingTracksFromBackup = null },
-            title = { Text("Restaurar canciones del respaldo") },
-            text = {
-                Text(
-                    "Se encontraron ${missing.size} pistas vinculadas a YouTube que no existen en este dispositivo.\n" +
-                        "Deseas descargarlas a tu carpeta de musica?"
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        container.centralBackupManager.enqueueMissingTracks(missing)
-                        playlistMessage = "Se agregaron ${missing.size} pistas a la cola de descargas."
-                        missingTracksFromBackup = null
+                },
+                showAddTracksDialog = showAddTracksDialog,
+                selectedPlaylistForDetail = selectedPlaylistForDetail,
+                allTracks = tracks,
+                onDismissAddTracks = { showAddTracksDialog = false },
+                onAddTracksToPlaylist = { activePl, addedTracks ->
+                    val updatedIds = (activePl.trackIds + addedTracks.map { it.id }).distinct()
+                    val updatedPlaylist = activePl.copy(trackIds = updatedIds)
+                    libraryViewModel.upsertPlaylist(updatedPlaylist) { success, message ->
+                        if (success) {
+                            selectedPlaylistId = updatedPlaylist.id
+                            showAddTracksDialog = false
+                            showFeedback("Se añadieron ${addedTracks.size} canciones a '${activePl.name}'.")
+                        } else if (message != null) {
+                            showFeedback(message)
+                        }
                     }
-                ) {
-                    Text("Descargar todas (${missing.size})")
+                },
+                pendingImportPlan = pendingImportPlan,
+                onDismissImportPlan = { pendingImportPlan = null },
+                onConfirmImportPlan = { plan, resolvedTrackIds ->
+                    val newPlaylist = PlaylistTextCodec.createPlaylist(plan.playlistName, resolvedTrackIds)
+                    libraryViewModel.upsertPlaylist(newPlaylist) { success, message ->
+                        if (success) {
+                            showFeedback("Lista '${plan.playlistName}' importada con ${resolvedTrackIds.size} canciones.")
+                            pendingImportPlan = null
+                            updateRecentPlaylists(newPlaylist.id)
+                        } else if (message != null) {
+                            showFeedback(message)
+                        }
+                    }
+                },
+                selectedTrackForLinks = selectedTrackForLinks,
+                catalogMap = catalogMap,
+                onDismissTrackLinks = { selectedTrackForLinks = null },
+                onSaveTrackLinks = { track, ytUrl, lrcPath, lrcSynced, lrclibUrl ->
+                    coroutineScope.launch {
+                        container.saveTrackLinks(track, ytUrl, lrcPath, lrcSynced, lrclibUrl)
+                    }
+                },
+                onAutoSearchYouTube = { track ->
+                    container.trackTrackerManager.searchYouTubeCandidate(
+                        track,
+                        allowSuspiciousTitle = true
+                    )
+                },
+                onAutoSearchLrcDetailed = { track ->
+                    container.trackTrackerManager.fetchLyricsWithUrl(track)
+                },
+                onDownloadLrc = { track, lrcContent, lrclibUrl ->
+                    container.trackTrackerManager.downloadAndSaveLrc(track, lrcContent, lrclibUrl) != null
+                },
+                onUnlinkTrack = { track ->
+                    coroutineScope.launch {
+                        container.saveTrackLinks(track, null, null, false, null)
+                    }
+                },
+                missingTracksFromBackup = missingTracksFromBackup,
+                onDismissMissingTracks = { missingTracksFromBackup = null },
+                onConfirmDownloadMissingTracks = { missing ->
+                    container.centralBackupManager.enqueueMissingTracks(missing)
+                    showFeedback("Se agregaron ${missing.size} pistas a la cola de descargas.")
+                    missingTracksFromBackup = null
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { missingTracksFromBackup = null }) {
-                    Text("Omitir")
-                }
-            }
-        )
-    }
+            )
+        }
     }
 }
-
-

@@ -110,6 +110,7 @@ fun EmptyLibrary(
 fun TrackRow(
     track: TrackEntity,
     onClick: () -> Unit,
+    isCurrent: Boolean = false,
     isLinked: Boolean = false,
     trackerColor: Color = Color.White,
     onTrackerClick: (() -> Unit)? = null
@@ -117,8 +118,16 @@ fun TrackRow(
     Row(
         Modifier
             .fillMaxWidth()
+            .clip(MusicaStyle.Shape.small)
+            .then(
+                if (isCurrent) {
+                    Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                } else {
+                    Modifier
+                }
+            )
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (track.artworkUri != null) {
@@ -143,7 +152,12 @@ fun TrackRow(
         }
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(track.title, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(
+                track.title,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
             Text(
                 "${track.artist}${track.album.takeIf(String::isNotBlank)?.let { " · $it" }.orEmpty()}",
                 style = MaterialTheme.typography.bodySmall,

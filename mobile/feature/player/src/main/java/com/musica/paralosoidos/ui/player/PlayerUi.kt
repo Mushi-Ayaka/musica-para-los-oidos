@@ -85,9 +85,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 // AÑADIDO: Para AlertDialog y botones
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.TextButton
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -231,21 +228,54 @@ fun FullPlayer(
             ) {
                 Row(
                     Modifier.fillMaxWidth().height(44.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Cerrar reproductor",
-                            modifier = Modifier.size(30.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onClose) {
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Cerrar reproductor",
+                                modifier = Modifier.size(30.dp)
+                            )
+                        }
+                        Text(
+                            "Reproduciendo",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Text(
-                        "Reproduciendo",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(MusicaStyle.Shape.pill)
+                            .background(MusicaStyle.Colors.borderStrong)
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        listOf(0 to "Portada", 1 to "Letras").forEach { (pageIndex, label) ->
+                            val selected = pagerState.currentPage == pageIndex
+                            Box(
+                                modifier = Modifier
+                                    .clip(MusicaStyle.Shape.pill)
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primary
+                                        else Color.Transparent
+                                    )
+                                    .clickable {
+                                        coroutineScope.launch { pagerState.animateScrollToPage(pageIndex) }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
 
                 BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
@@ -291,7 +321,6 @@ fun FullPlayer(
                                     catalogEntry = catalogEntry,
                                     positionMs = { position().toLong() },
                                     scrollSpeed = lyricsScrollSpeed,
-                                    onOpenSettings = onOpenLyricsSettings,
                                     onLinkLrcFromLrclib = onLinkLrcFromLrclib
                                 )
                             }
@@ -792,266 +821,6 @@ internal fun PlaybackTimeLabels(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(formatTime(position().toLong() / 1000), style = MaterialTheme.typography.labelSmall)
         Text(formatTime(duration().toLong() / 1000), style = MaterialTheme.typography.labelSmall)
-    }
-}
-
-@Composable
-internal fun LyricsPane(
-    modifier: Modifier = Modifier,
-    track: TrackEntity,
-    catalogEntry: CatalogTrackEntity?,
-    positionMs: () -> Long,
-    scrollSpeed: Float,
-    onOpenSettings: () -> Unit,
-    onLinkLrcFromLrclib: suspend (TrackEntity) -> Boolean = { false }
-) {
-    val context = LocalContext.current
-    var result by remember(track.id) { mutableStateOf<LyricsSearchResult?>(null) }
-    var loading by remember(track.id) { mutableStateOf(true) }
-    var retryToken by remember(track.id) { mutableIntStateOf(0) }
-    var isLinkingLrc by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-
-    LaunchedEffect(track.id, retryToken) {
-        loading = true
-        result = null
-        result = withContext(Dispatchers.IO) {
-            runCatching {
-                // 1. Intentar ruta vinculada en catalogo primero
-                val linkedPath = catalogEntry?.lrcPath
-                    ?.takeIf { it.isNotBlank() && it != "vinculado" && it != "local" }
-                if (linkedPath != null) {
-                    val file = java.io.File(linkedPath)
-                    if (file.exists() && file.length() > 0) {
-                        val text = file.readText(Charsets.UTF_8)
-                        val document = LrcLyrics.parseDocument(text)
-                        if (document.lines.isNotEmpty()) {
-                            return@runCatching LyricsSearchResult(
-                                sourceName = file.name,
-                                document = document,
-                                logs = listOf("Letra cargada desde vinculo: ${file.name}.")
-                            )
-                        }
-                    }
-                }
-                // 2. Intentar archivo .lrc junto al archivo de audio
-                if (track.folderPath.isNotBlank()) {
-                    val nameWithoutExt = track.displayName.substringBeforeLast('.')
-                    val sidecatFile = java.io.File(track.folderPath, "$nameWithoutExt.lrc")
-                    if (sidecatFile.exists() && sidecatFile.length() > 0) {
-                        val text = sidecatFile.readText(Charsets.UTF_8)
-                        val document = LrcLyrics.parseDocument(text)
-                        if (document.lines.isNotEmpty()) {
-                            return@runCatching LyricsSearchResult(
-                                sourceName = sidecatFile.name,
-                                document = document,
-                                logs = listOf("Letra cargada desde carpeta del audio: ${sidecatFile.name}.")
-                            )
-                        }
-                    }
-                }
-                // 3. Fallback: buscar en MediaStore
-                LyricsFileRepository.findMatchingLyrics(
-                    context = context,
-                    audioFileName = track.displayName,
-                    trackTitle = track.title,
-                    trackArtist = track.artist
-                )
-            }.getOrElse { error ->
-                LyricsSearchResult(
-                    sourceName = null,
-                    document = null,
-                    logs = listOf("Error al buscar letras: ${error.localizedMessage ?: "error desconocido"}.")
-                )
-            }
-        }
-        loading = false
-    }
-
-    Column(
-        modifier = modifier.padding(top = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text(
-            "Letras",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (loading) {
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(10.dp))
-                Text("Cargando letra...", style = MaterialTheme.typography.bodySmall)
-            }
-        } else {
-            val document = result?.document
-            val lines = document?.lines.orEmpty()
-            if (document == null || lines.isEmpty()) {
-                val logs = result?.logs.orEmpty()
-                Column(
-                    Modifier.fillMaxWidth().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(logs) { log ->
-                            Text(
-                                log,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(onClick = { retryToken++ }, enabled = !isLinkingLrc) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Reintentar")
-                        }
-                        
-                        // Botón blanco para vincular letras desde LRCLIB
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    isLinkingLrc = true
-                                    val success = onLinkLrcFromLrclib(track)
-                                    if (success) {
-                                        retryToken++
-                                        android.widget.Toast.makeText(context, "Letra sincronizada vinculada con éxito", android.widget.Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        android.widget.Toast.makeText(context, "No se encontró letra sincronizada en LRCLIB", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                    isLinkingLrc = false
-                                }
-                            },
-                            enabled = !isLinkingLrc,
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            if (isLinkingLrc) {
-                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.Black)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Buscando en LRCLIB...", fontWeight = FontWeight.Bold)
-                            } else {
-                                Icon(
-                                    Icons.Filled.Download, 
-                                    contentDescription = "Vincular desde LRCLIB", 
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text("Vincular desde LRCLIB", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            } else {
-                if (document.synced) {
-                    Text(
-                        buildString {
-                            append(result?.sourceName ?: "LRC")
-                            append(" · sincronizada")
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            buildString {
-                                append(result?.sourceName ?: "LRC")
-                                append(" · sin tiempos")
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    isLinkingLrc = true
-                                    val success = onLinkLrcFromLrclib(track)
-                                    if (success) {
-                                        retryToken++
-                                        android.widget.Toast.makeText(context, "Letra sincronizada vinculada", android.widget.Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        android.widget.Toast.makeText(context, "No se encontró letra con tiempo en LRCLIB", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                    isLinkingLrc = false
-                                }
-                            },
-                            enabled = !isLinkingLrc,
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color.Black
-                            ),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            if (isLinkingLrc) {
-                                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = Color.Black)
-                                Spacer(Modifier.width(4.dp))
-                                Text("Buscando...", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            } else {
-                                Icon(
-                                    Icons.Filled.Download,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text("Vincular desde LRCLIB", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-                val intervalMs = (4_000f / scrollSpeed.coerceIn(0.5f, 2f)).toLong().coerceAtLeast(500L)
-                val activeLine = if (document.synced) {
-                    LrcLyrics.currentLineIndex(lines, positionMs())
-                } else {
-                    (positionMs() / intervalMs).toInt().coerceIn(0, lines.lastIndex)
-                }
-                val listState = rememberLazyListState()
-                LaunchedEffect(activeLine) {
-                    if (lines.isNotEmpty()) {
-                        listState.animateScrollToItem((activeLine - 2).coerceAtLeast(0))
-                    }
-                }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp)
-                ) {
-                    items(lines.size) { index ->
-                        Text(
-                            lines[index].text,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = if (index == activeLine) FontWeight.Bold else FontWeight.Normal,
-                            color = if (index == activeLine) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Start
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 

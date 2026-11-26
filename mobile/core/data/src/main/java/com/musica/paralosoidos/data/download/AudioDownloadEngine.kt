@@ -64,26 +64,45 @@ class AudioDownloadEngine(
                     "$withoutExt.%(ext)s"
                 }
 
-            val request = YoutubeDLRequest("https://www.youtube.com/watch?v=${task.videoId}").apply {
-                addOption("-x")
-                when (task.format) {
-                    AudioOutputFormat.MP3 -> {
-                        addOption("--audio-format", "mp3")
-                        val bitrateValue = task.bitrate ?: 192
-                        addOption("--audio-quality", "${bitrateValue}K")
+            fun buildRequest(embedCover: Boolean) =
+                YoutubeDLRequest("https://www.youtube.com/watch?v=${task.videoId}").apply {
+                    addOption("-x")
+                    when (task.format) {
+                        AudioOutputFormat.MP3 -> {
+                            addOption("--audio-format", "mp3")
+                            val bitrateValue = task.bitrate ?: 192
+                            addOption("--audio-quality", "${bitrateValue}K")
+                        }
+                        else -> {
+                            addOption("--audio-format", "best")
+                        }
                     }
-                    else -> {
-                        addOption("--audio-format", "best")
+                    if (embedCover) {
+                        addOption("--embed-thumbnail")
+                        addOption("--convert-thumbnails", "jpg")
                     }
+                    addOption("--embed-metadata")
+                    addOption("-o", outputTemplate)
+                    addOption("--no-playlist")
+                    addOption("--no-part")
                 }
-                addOption("-o", outputTemplate)
-                addOption("--no-playlist")
-                addOption("--no-part")
-            }
 
-            YoutubeDL.getInstance().execute(request) { progressValue, _, _ ->
-                val pct = progressValue.toInt().coerceIn(0, 99)
-                onProgress(pct, "")
+            try {
+                YoutubeDL.getInstance().execute(buildRequest(embedCover = true)) { progressValue, _, _ ->
+                    val pct = progressValue.toInt().coerceIn(0, 99)
+                    onProgress(pct, "")
+                }
+            } catch (embedError: Exception) {
+                if (embedError is kotlinx.coroutines.CancellationException) throw embedError
+                android.util.Log.w(
+                    "AudioDownloadEngine",
+                    "Fallo al incrustar portada para ${task.videoId}, reintentando solo audio",
+                    embedError
+                )
+                YoutubeDL.getInstance().execute(buildRequest(embedCover = false)) { progressValue, _, _ ->
+                    val pct = progressValue.toInt().coerceIn(0, 99)
+                    onProgress(pct, "")
+                }
             }
 
             // Encontrar el archivo resultante

@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Música para los Oídos</string>
+    <string name="widget_music_description">Reproductor compacto 4x1 con portada y controles</string>
+    <string name="widget_default_title">Música para los Oídos</string>
+    <string name="widget_default_artist">Toca para reproducir</string>
+    <string name="widget_cover_desc">Portada de la pista</string>
+    <string name="widget_prev_desc">Anterior</string>
+    <string name="widget_play_pause_desc">Reproducir o pausar</string>
+    <string name="widget_next_desc">Siguiente</string>
 </resources>

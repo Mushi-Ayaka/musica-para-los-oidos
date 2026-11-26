@@ -51,8 +51,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.platform.LocalContext
@@ -67,6 +69,7 @@ import com.musica.paralosoidos.data.download.YoutubeDLState
 @Composable
 fun DownloaderScreen(
     viewModel: DownloaderViewModel,
+    onPickOutputFolder: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -86,270 +89,295 @@ fun DownloaderScreen(
     val canSearch = isOnline && !isServiceBlocked
     val canDownload = canSearch && !settings.outputFolderUri.isNullOrBlank()
     val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val historyExpanded = remember { androidx.compose.runtime.mutableStateOf(false) }
 
-    Column(
+    LazyColumn(
         modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Section Header with Queue Badge Button
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     "Descargar",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.ExtraBold
                 )
-            }
 
-            BadgedBox(
-                badge = {
-                    if (activeCount > 0) {
-                        Badge(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ) {
-                            Text(
-                                text = "$activeCount",
-                                fontWeight = FontWeight.Bold
-                            )
+                BadgedBox(
+                    badge = {
+                        if (activeCount > 0) {
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ) {
+                                Text(
+                                    text = "$activeCount",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
-                }
-            ) {
-                IconButton(onClick = viewModel::openQueueSheet) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = "Ver cola de descargas",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
+                ) {
+                    IconButton(onClick = viewModel::openQueueSheet) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = "Ver cola de descargas",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
         }
 
-        // Offline Autoprotection Banner
         if (!isOnline) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.WifiOff,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Sin conexion a Internet. Las descargas y busquedas se habilitaran automaticamente al conectarse.",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
-
-        if (youtubeDLState != YoutubeDLState.Ready) {
-            val updateMessage = when (val state = youtubeDLState) {
-                YoutubeDLState.Preparing -> "Preparando motor yt-dlp..."
-                YoutubeDLState.Updating -> "Actualizando motor yt-dlp en segundo plano. Puedes ir buscando y agregando canciones a la cola."
-                YoutubeDLState.Ready -> ""
-                is YoutubeDLState.Failed -> "No se pudo actualizar yt-dlp: ${state.message}"
-            }
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = updateMessage,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (youtubeDLState is YoutubeDLState.Failed) {
-                        OutlinedButton(
-                            onClick = viewModel::retryService,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Reintentar", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Banner: carpeta de descarga no configurada
-        if (settings.outputFolderUri.isNullOrBlank()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(
-                        Icons.Default.FolderOpen,
-                        contentDescription = null,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Configura la carpeta de descarga",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Para descargar canciones y letras (.lrc), primero elige la carpeta de destino en Ajustes > Trackers y Descargas.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-        }
-
-        // Service Blocked (YouTube Bot Detection / OTA update) Banner
-        if (isServiceBlocked) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Default.ErrorOutline,
+                            Icons.Default.WifiOff,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = serviceNoticeMessage ?: "Servicio de descargas temporalmente no disponible por cambios en YouTube. Se actualizara automaticamente.",
+                            text = "Sin conexión a Internet. Las descargas y búsquedas se habilitarán automáticamente al conectarse.",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    OutlinedButton(
-                        onClick = { viewModel.retryService() },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
+                }
+            }
+        }
+
+        if (youtubeDLState != YoutubeDLState.Ready) {
+            item {
+                val updateMessage = when (val state = youtubeDLState) {
+                    YoutubeDLState.Preparing -> "Preparando motor yt-dlp..."
+                    YoutubeDLState.Updating -> "Actualizando motor yt-dlp en segundo plano. Puedes ir buscando y agregando canciones a la cola."
+                    YoutubeDLState.Ready -> ""
+                    is YoutubeDLState.Failed -> "No se pudo actualizar yt-dlp: ${state.message}"
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Reintentar", fontSize = 12.sp)
+                        Text(
+                            text = updateMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (youtubeDLState is YoutubeDLState.Failed) {
+                            OutlinedButton(
+                                onClick = viewModel::retryService,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Reintentar", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // User Feedback (Snack-style) Notice
-        if (userFeedbackMessage != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = userFeedbackMessage.orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f)
+        if (settings.outputFolderUri.isNullOrBlank()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Configura la carpeta de descarga",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Para descargar canciones y letras (.lrc), elige la carpeta donde se guardarán.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        if (onPickOutputFolder != null) {
+                            Button(
+                                onClick = onPickOutputFolder,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Elegir carpeta ahora")
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Search Bar
-        DownloaderSearchBar(
-            query = query,
-            onQueryChange = viewModel::onQueryChanged,
-            onSearch = viewModel::search,
-            isSearching = isSearching,
-            enabled = canSearch
-        )
+        if (isServiceBlocked) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = serviceNoticeMessage ?: "Servicio de descargas temporalmente no disponible por cambios en YouTube. Se actualizará automáticamente.",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.retryService() },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Reintentar", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
+        }
 
-        // Quick Config Bar
-        QuickConfigBar(
-            settings = settings,
-            onSelectQuality = viewModel::updateQuality,
-            onToggleSyncLyrics = viewModel::toggleSyncLyrics,
-            enabled = canSearch
-        )
+        if (userFeedbackMessage != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = userFeedbackMessage.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
 
-        // Results or Empty State
+        item {
+            DownloaderSearchBar(
+                query = query,
+                onQueryChange = viewModel::onQueryChanged,
+                onSearch = viewModel::search,
+                isSearching = isSearching,
+                enabled = canSearch
+            )
+        }
+
+        item {
+            QuickConfigBar(
+                settings = settings,
+                onSelectQuality = viewModel::updateQuality,
+                onToggleSyncLyrics = viewModel::toggleSyncLyrics,
+                enabled = canSearch
+            )
+        }
+
         if (searchResults.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Resultados (${searchResults.size})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Resultados (${searchResults.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
 
-            searchResults.forEach { result ->
+            items(searchResults, key = { "dl-res-${it.id}" }) { result ->
                 DownloadResultCard(
                     result = result,
                     activeSettings = settings,
@@ -358,98 +386,97 @@ fun DownloaderScreen(
                 )
             }
         } else if (!isSearching) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 36.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.padding(horizontal = 24.dp)
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 36.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (settings.outputFolderUri.isNullOrBlank()) {
-                        // Sin carpeta configurada: guiar al usuario
-                        Icon(
-                            Icons.Default.FolderOpen,
-                            contentDescription = null,
-                            modifier = Modifier.size(54.dp),
-                            tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
-                        )
-                        Text(
-                            "Primero configura la carpeta",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "Ve a Ajustes > Trackers y Descargas y elige la carpeta donde se guardaran las canciones y los archivos .lrc descargados.",
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-                    } else {
-                        // Con carpeta: guia de busqueda normal
-                        Icon(
-                            Icons.Default.CloudDownload,
-                            contentDescription = null,
-                            modifier = Modifier.size(54.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            "Busca musica en YouTube",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "Escribe el nombre de la cancion, artista o pega un enlace de YouTube directamente para comenzar a descargar.",
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    ) {
+                        if (settings.outputFolderUri.isNullOrBlank()) {
+                            Icon(
+                                Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                modifier = Modifier.size(54.dp),
+                                tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                "Primero configura la carpeta",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Elige la carpeta donde se guardarán las canciones y los archivos .lrc descargados.",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                modifier = Modifier.size(54.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                            )
+                            Text(
+                                "Busca música en YouTube",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Escribe el nombre de la canción, artista o pega un enlace de YouTube directamente para comenzar a descargar.",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
             }
         }
-    }
 
-    // Download History Section
-    if (downloadHistory.isNotEmpty()) {
-        val historyExpanded = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-        androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { historyExpanded.value = !historyExpanded.value }
-                .padding(vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.History,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Historial de descargas (${downloadHistory.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
+        if (downloadHistory.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { historyExpanded.value = !historyExpanded.value }
+                        .padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Historial de descargas (${downloadHistory.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        if (historyExpanded.value) "Ocultar" else "Ver todo",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
-            Text(
-                if (historyExpanded.value) "Ocultar" else "Ver todo",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        if (historyExpanded.value) {
-            downloadHistory.take(20).forEach { item ->
-                DownloadHistoryItem(item = item)
+            if (historyExpanded.value) {
+                items(downloadHistory.take(20), key = { "dl-hist-${it.id}" }) { item ->
+                    DownloadHistoryItem(item = item)
+                }
             }
         }
     }
